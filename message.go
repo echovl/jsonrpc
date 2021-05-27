@@ -3,6 +3,7 @@ package jsonrpc
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 )
 
 // message represents jsonrpc messages that can be marshal to a raw jsonrpc object
@@ -10,14 +11,13 @@ type message interface {
 	marshal() body
 }
 
-func encodeMessage(msg message) ([]byte, error) {
+func encodeMessage(w io.Writer, msg message) error {
 	b := msg.marshal()
 	b.Version = "2.0"
-	data, err := json.Marshal(b)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling jsonrpc message: %w", err)
+	if err := json.NewEncoder(w).Encode(msg); err != nil {
+		return fmt.Errorf("marshaling jsonrpc message: %w", err)
 	}
-	return data, nil
+	return nil
 }
 
 // Request represents a JSON-RPC request received by a server or to be send by a client.
@@ -51,9 +51,9 @@ func (res *Response) marshal() body {
 }
 
 // DecodeRequest decodes a JSON-encoded body and returns a response message.
-func decodeResponse(data []byte) (Response, error) {
+func decodeResponse(r io.Reader) (Response, error) {
 	msg := &body{}
-	if err := json.Unmarshal(data, msg); err != nil {
+	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return Response{}, fmt.Errorf("unmarshaling jsonrpc message: %w", err)
 	}
 	// TODO: validate id following jsonrpc spec

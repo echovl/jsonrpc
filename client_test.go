@@ -44,7 +44,7 @@ func (e *echoMessage) equal(to echoMessage) bool {
 	return e.String == to.String && e.Int == to.Int && e.Float == to.Float && e.Bool == to.Bool
 }
 
-func TestClientCall(t *testing.T) {
+func TestClientCallAsync(t *testing.T) {
 	// given
 	ts := newEchoServer(t, false)
 	defer ts.Close()
@@ -56,7 +56,7 @@ func TestClientCall(t *testing.T) {
 		w.Add(1)
 		go func(t *testing.T, msg echoMessage) {
 			reply := &echoMessage{}
-			err := client.Call(context.Background(), "getReply", msg, &reply)
+			err := client.Call(context.Background(), "echo", msg, &reply)
 			if err != nil {
 				t.Error(err)
 			}
@@ -90,7 +90,7 @@ func TestClientCallTimeout(t *testing.T) {
 	}
 }
 
-func newEchoServer(t *testing.T, sleep bool) *httptest.Server {
+func newEchoServer(t testing.TB, sleep bool) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if sleep {
 			time.Sleep(2 * time.Millisecond)

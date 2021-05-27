@@ -1,4 +1,0 @@
-JSON RPC MODULE
-1. Provide a simple API
-2. Server and client 
-3. Transport agnostic

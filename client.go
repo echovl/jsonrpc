@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sync/atomic"
 )
@@ -14,7 +14,11 @@ import (
 type Client struct {
 	next       int64
 	url        string
-	httpClient *http.Client
+	httpClient httpClient
+}
+
+type httpClient interface {
+	Do(*http.Request) (*http.Response, error)
 }
 
 // NewClient returns a new Client to handle requests to the JSON-RPC server at the other end of the connection.
@@ -46,17 +50,18 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 		Params: p,
 	}
 
-	raw, err := encodeMessage(req)
-	if err != nil {
+	buf := &bytes.Buffer{}
+	if err := encodeMessage(buf, req); err != nil {
 		done <- fmt.Errorf("encoding jsonrpc request: %w", err)
 	}
 
-	data, err := c.send(ctx, raw)
+	rc, err := c.send(ctx, buf)
 	if err != nil {
 		done <- fmt.Errorf("sending jsonrpc request: %w", err)
 	}
+	defer rc.Close()
 
-	res, err := decodeResponse(data)
+	res, err := decodeResponse(rc)
 	if err != nil {
 		done <- fmt.Errorf("decoding jsonrpc response: %w", err)
 	}
@@ -67,9 +72,9 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 	done <- nil
 }
 
-// send sends raw data to the http server and returns the response
-func (c *Client) send(ctx context.Context, data []byte) ([]byte, error) {
-	hreq, err := http.NewRequestWithContext(ctx, "POST", c.url, bytes.NewBuffer(data))
+// send sends data from r to the http server and returns a reader of the response
+func (c *Client) send(ctx context.Context, r io.Reader) (io.ReadCloser, error) {
+	hreq, err := http.NewRequestWithContext(ctx, "POST", c.url, r)
 	hreq.Header.Set("Content-Type", "application/json")
 	hreq.Header.Set("Accept", "application/json")
 
@@ -77,12 +82,7 @@ func (c *Client) send(ctx context.Context, data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed sending request: %w", err)
 	}
-	defer hres.Body.Close()
-	res, err := ioutil.ReadAll(hres.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed reading response body: %w", err)
-	}
-	return res, nil
+	return hres.Body, nil
 }
 
 // nextID returns the next id using atomic operations
