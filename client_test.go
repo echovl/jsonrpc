@@ -102,7 +102,7 @@ func newEchoServer(t *testing.T, sleep bool) *httptest.Server {
 		}
 		defer r.Body.Close()
 
-		req := &Body{}
+		req := &body{}
 		if err := json.Unmarshal(data, req); err != nil {
 			t.Errorf("unmarshaling server request: %w", err)
 			return

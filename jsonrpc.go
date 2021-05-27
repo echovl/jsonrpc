@@ -1,8 +1,10 @@
+// TODO: add error struct and error codes
 package jsonrpc
 
 import "encoding/json"
 
-type Body struct {
+// TODO: add description
+type body struct {
 	Version string          `json:"jsonrpc"`
 	ID      interface{}     `json:"id,omitempty"`
 	Method  string          `json:"method,omitempty"`

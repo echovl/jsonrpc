@@ -18,6 +18,7 @@ type Client struct {
 }
 
 // NewClient returns a new Client to handle requests to the JSON-RPC server at the other end of the connection.
+// TODO: support custom httpClients
 func NewClient(url string) *Client {
 	return &Client{url: url, httpClient: http.DefaultClient}
 }
@@ -33,6 +34,7 @@ func (c *Client) Call(ctx context.Context, method string, params, reply interfac
 	}
 }
 
+// TODO: we should parse and send response errors to the done channel
 func (c *Client) call(ctx context.Context, method string, params, reply interface{}, done chan error) {
 	p, err := json.Marshal(params)
 	if err != nil {
@@ -44,7 +46,7 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 		Params: p,
 	}
 
-	raw, err := EncodeMessage(req)
+	raw, err := encodeMessage(req)
 	if err != nil {
 		done <- fmt.Errorf("encoding jsonrpc request: %w", err)
 	}
@@ -54,7 +56,7 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 		done <- fmt.Errorf("sending jsonrpc request: %w", err)
 	}
 
-	res, err := DecodeResponse(data)
+	res, err := decodeResponse(data)
 	if err != nil {
 		done <- fmt.Errorf("decoding jsonrpc response: %w", err)
 	}
@@ -65,6 +67,7 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 	done <- nil
 }
 
+// send sends raw data to the http server and returns the response
 func (c *Client) send(ctx context.Context, data []byte) ([]byte, error) {
 	hreq, err := http.NewRequestWithContext(ctx, "POST", c.url, bytes.NewBuffer(data))
 	hreq.Header.Set("Content-Type", "application/json")
@@ -82,6 +85,7 @@ func (c *Client) send(ctx context.Context, data []byte) ([]byte, error) {
 	return res, nil
 }
 
+// nextID returns the next id using atomic operations
 func (c *Client) nextID() int64 {
 	return atomic.AddInt64(&c.next, 1)
 }

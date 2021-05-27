@@ -5,11 +5,12 @@ import (
 	"fmt"
 )
 
-type Message interface {
-	marshal() Body
+// message represents jsonrpc messages that can be marshal to a raw jsonrpc object
+type message interface {
+	marshal() body
 }
 
-func EncodeMessage(msg Message) ([]byte, error) {
+func encodeMessage(msg message) ([]byte, error) {
 	b := msg.marshal()
 	b.Version = "2.0"
 	data, err := json.Marshal(b)
@@ -26,8 +27,8 @@ type Request struct {
 	Params json.RawMessage
 }
 
-func (req *Request) marshal() Body {
-	return Body{
+func (req *Request) marshal() body {
+	return body{
 		ID:     req.ID,
 		Method: req.Method,
 		Params: req.Params,
@@ -41,8 +42,8 @@ type Response struct {
 	Result json.RawMessage
 }
 
-func (res *Response) marshal() Body {
-	return Body{
+func (res *Response) marshal() body {
+	return body{
 		ID:     res.ID,
 		Result: res.Result,
 		Error:  res.Error,
@@ -50,8 +51,8 @@ func (res *Response) marshal() Body {
 }
 
 // DecodeRequest decodes a JSON-encoded body and returns a response message.
-func DecodeResponse(data []byte) (Response, error) {
-	msg := &Body{}
+func decodeResponse(data []byte) (Response, error) {
+	msg := &body{}
 	if err := json.Unmarshal(data, msg); err != nil {
 		return Response{}, fmt.Errorf("unmarshaling jsonrpc message: %w", err)
 	}
@@ -72,9 +73,9 @@ func DecodeResponse(data []byte) (Response, error) {
 	}, nil
 }
 
-// DecodeRequest decodes a JSON-encoded body and returns a request message.
-func DecodeRequest(data []byte) (Request, error) {
-	b := &Body{}
+// decodeRequest decodes a JSON-encoded body and returns a request message.
+func decodeRequest(data []byte) (Request, error) {
+	b := &body{}
 	if err := json.Unmarshal(data, b); err != nil {
 		return Request{}, fmt.Errorf("unmarshaling jsonrpc message: %w", err)
 	}
