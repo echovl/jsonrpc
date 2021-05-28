@@ -1,27 +1,14 @@
 package jsonrpc
 
 import (
-	"encoding/json"
-	"fmt"
+	"log"
 	"testing"
 )
 
-type Person struct {
-	Name string
-	Age  int
-}
-
-func (p Person) Greet(name string) {
-	fmt.Println("hi", name)
-}
-
 type Api struct{ state int }
 
-func (api Api) Version(app string) (string, error) {
-	fmt.Printf("api address %p\n", &api)
-	fmt.Println(api.state)
-	api.state++
-	return "1.0.0", nil
+func (api Api) Version(app string) (Version, error) {
+	return Version{"3.0.0"}, nil
 }
 
 func TestServer(t *testing.T) {
@@ -36,27 +23,12 @@ func TestServer(t *testing.T) {
 
 	// how jsonrpc server could work
 	s := NewServer("/api")
-	s.HandleFunc("version", func(r Request) (interface{}, error) {
-		return "1.0.0", nil
-	})
-
-	s.HandleFunc("echo", func(r Request) (interface{}, error) {
-		var msg string
-		err := json.Unmarshal(r.Params, &msg)
-		if err != nil {
-			return nil, err
-		}
-		return msg, nil
-	})
-
-	s.HandleFunc2("version2", func(params Person) (Version, error) {
-		fmt.Println("server called with", params)
+	s.HandleFunc("version2", func(app string) (Version, error) {
+		log.Println("server called with", app)
 		return Version{"2.0.0"}, nil
 	})
 
 	api := Api{}
-	s.HandleFunc2("version3", api.Version)
+	s.HandleFunc("version3", api.Version)
 	s.ListenAndServe(":8080")
-
-	fmt.Println(s.handlers)
 }

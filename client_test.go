@@ -109,7 +109,7 @@ func newEchoServer(t testing.TB, sleep bool) *httptest.Server {
 		}
 
 		msg := &echoMessage{}
-		if err := json.Unmarshal(req.Params, msg); err != nil {
+		if err := json.Unmarshal(*req.Params, msg); err != nil {
 			t.Errorf("unmarshaling jsonrpc params: %w", err)
 		}
 

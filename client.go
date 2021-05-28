@@ -43,31 +43,36 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 	p, err := json.Marshal(params)
 	if err != nil {
 		done <- fmt.Errorf("marshaling jsonrpc params: %w", err)
+		return
 	}
 	req := &Request{
 		ID:     c.nextID(),
 		Method: method,
-		Params: p,
+		Params: (*json.RawMessage)(&p),
 	}
 
 	buf := &bytes.Buffer{}
 	if err := encodeMessage(buf, req); err != nil {
 		done <- fmt.Errorf("encoding jsonrpc request: %w", err)
+		return
 	}
 
 	rc, err := c.send(ctx, buf)
 	if err != nil {
 		done <- fmt.Errorf("sending jsonrpc request: %w", err)
+		return
 	}
 	defer rc.Close()
 
 	res, err := decodeResponse(rc)
 	if err != nil {
 		done <- fmt.Errorf("decoding jsonrpc response: %w", err)
+		return
 	}
 
-	if err := json.Unmarshal(res.Result, reply); err != nil {
+	if err := json.Unmarshal(*res.Result, reply); err != nil {
 		done <- err
+		return
 	}
 	done <- nil
 }
