@@ -1,8 +1,12 @@
 package jsonrpc
 
 import (
+	"encoding/json"
 	"fmt"
 	"go/token"
+	"io/ioutil"
+	"log"
+	"net/http"
 	"reflect"
 )
 
@@ -10,6 +14,7 @@ var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
 
 type Server struct {
 	handlers map[string]handlerType
+	path     string
 }
 
 type Version struct {
@@ -22,8 +27,8 @@ type handlerType struct {
 	resultType reflect.Type
 }
 
-func NewServer() *Server {
-	return &Server{handlers: make(map[string]handlerType)}
+func NewServer(path string) *Server {
+	return &Server{handlers: make(map[string]handlerType), path: path}
 }
 
 func (s *Server) HandleFunc(method string, handler func(Request) (interface{}, error)) {
@@ -83,7 +88,41 @@ func (s *Server) HandleFunc2(method string, handler interface{}) {
 }
 
 func (s *Server) ListenAndServe(addr string) {
-	fmt.Printf("running jsonrpc server at %v", addr)
+	http.HandleFunc(s.path, func(rw http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			rw.WriteHeader(http.StatusNotFound)
+			rw.Write([]byte("not found"))
+		}
+
+		// read method
+		b, _ := ioutil.ReadAll(r.Body)
+		defer r.Body.Close()
+		req, err := decodeRequest(b)
+		if err != nil {
+			//handle decode error
+			log.Fatal(err)
+		}
+
+		fmt.Println("handling method", req.Method)
+
+		// get handler type
+		htype, ok := s.handlers[req.Method]
+		if !ok {
+			// handle method not found
+			rw.WriteHeader(http.StatusNotFound)
+			rw.Write([]byte("not found"))
+		}
+
+		fmt.Println(htype.paramsType, htype.resultType)
+
+		// build params and call the handler func
+		//params := reflect.Indirect(reflect.Zero(htype.paramsType))
+		json.Unmarshal(req.Params, nil)
+
+		rw.Write([]byte(`{"jsonrpc": "2.0", "result": {"message":"hello"}, "id": 1}`))
+	})
+
+	http.ListenAndServe(addr, nil)
 }
 
 func isExportedOrBuiltinType(t reflect.Type) bool {

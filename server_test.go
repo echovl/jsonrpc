@@ -35,7 +35,7 @@ func TestServer(t *testing.T) {
 	*/
 
 	// how jsonrpc server could work
-	s := NewServer()
+	s := NewServer("/api")
 	s.HandleFunc("version", func(r Request) (interface{}, error) {
 		return "1.0.0", nil
 	})
@@ -56,6 +56,7 @@ func TestServer(t *testing.T) {
 
 	api := Api{}
 	s.HandleFunc2("version3", api.Version)
+	s.ListenAndServe(":8080")
 
 	fmt.Println(s.handlers)
 }
