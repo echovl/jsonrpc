@@ -26,9 +26,10 @@ type Server struct {
 }
 
 type handlerType struct {
-	f     reflect.Value
-	ptype reflect.Type
-	rtype reflect.Type
+	f       reflect.Value
+	ptype   reflect.Type
+	rtype   reflect.Type
+	numArgs int
 }
 
 func NewServer() *Server {
@@ -39,23 +40,23 @@ func NewServer() *Server {
 // params and result should be an exported type (or builtin)
 func (s *Server) HandleFunc(method string, handler interface{}) error {
 	h := reflect.ValueOf(handler)
-	ptype, rtype, err := inspectHandler(h)
+	numArgs, ptype, rtype, err := inspectHandler(h)
 	if err != nil {
 		return fmt.Errorf("jsonrpc: %v", err)
 	}
-	s.handler.Store(method, handlerType{h, ptype, rtype})
+	s.handler.Store(method, handlerType{f: h, ptype: ptype, rtype: rtype, numArgs: numArgs})
 	return nil
 }
 
-// TODO: add context support, something like this: func (ctx, params) (result, error)
-func inspectHandler(h reflect.Value) (ptype, rtype reflect.Type, err error) {
+func inspectHandler(h reflect.Value) (numArgs int, ptype, rtype reflect.Type, err error) {
 	ht := h.Type()
 	if hkind := h.Kind(); hkind != reflect.Func {
 		err = fmt.Errorf("invalid handler type: expected %v, got %v", "func", hkind)
 		return
 	}
 
-	if ht.NumIn() != 2 {
+	numArgs = ht.NumIn()
+	if numArgs != 2 && numArgs != 1 {
 		err = fmt.Errorf("invalid number of args: expected %v, got %v", 2, ht.NumIn())
 		return
 	}
@@ -65,10 +66,12 @@ func inspectHandler(h reflect.Value) (ptype, rtype reflect.Type, err error) {
 		return
 	}
 
-	ptype = ht.In(1)
-	if !isExportedOrBuiltinType(ptype) {
-		err = fmt.Errorf("invalid arg type: expected exported or builtin")
-		return
+	if numArgs == 2 {
+		ptype = ht.In(1)
+		if !isExportedOrBuiltinType(ptype) {
+			err = fmt.Errorf("invalid arg type: expected exported or builtin")
+			return
+		}
 	}
 
 	if numOut := ht.NumOut(); numOut != 2 {

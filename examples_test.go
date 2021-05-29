@@ -16,9 +16,11 @@ type Version struct {
 
 func ExampleServer() {
 	done := make(chan struct{})
-	s := jsonrpc.NewServer()
+	server := jsonrpc.NewServer()
 
-	go startServer(s, done)
+	go startServer(server, done)
+
+	<-done
 
 	client := jsonrpc.NewClient("http://127.0.0.1:8080/api")
 	reply := &Version{}
@@ -30,8 +32,6 @@ func ExampleServer() {
 
 	fmt.Println("app version is", reply.Tag)
 	time.Sleep(2 * time.Second)
-	// Output
-	// app version is 1.0.0.0
 }
 
 func startServer(s *jsonrpc.Server, done chan<- struct{}) {
