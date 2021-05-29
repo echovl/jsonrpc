@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 )
 
 // message represents jsonrpc messages that can be marshal to a raw jsonrpc object
@@ -15,7 +14,6 @@ type message interface {
 func encodeMessage(w io.Writer, msg message) error {
 	b := msg.marshal()
 	b.Version = "2.0"
-	log.Printf("%v", msg)
 	if err := json.NewEncoder(w).Encode(msg); err != nil {
 		return fmt.Errorf("marshaling jsonrpc message: %w", err)
 	}

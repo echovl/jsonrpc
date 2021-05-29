@@ -16,7 +16,6 @@ var (
 	typeOfError   = reflect.TypeOf((*error)(nil)).Elem()
 	typeOfContext = reflect.TypeOf((*context.Context)(nil)).Elem()
 )
-
 var (
 	errServerMarshalParams   = errors.New("invalid request params type format")
 	errServerUnmarshalReturn = errors.New("invalid return type format")
@@ -24,11 +23,6 @@ var (
 
 type Server struct {
 	handler sync.Map
-	path    string
-}
-
-type Version struct {
-	Tag string
 }
 
 type handlerType struct {
@@ -37,8 +31,8 @@ type handlerType struct {
 	rtype reflect.Type
 }
 
-func NewServer(path string) *Server {
-	return &Server{path: path}
+func NewServer() *Server {
+	return &Server{}
 }
 
 // handler should be a func (params) (result, error)
@@ -47,11 +41,9 @@ func (s *Server) HandleFunc(method string, handler interface{}) error {
 	h := reflect.ValueOf(handler)
 	ptype, rtype, err := inspectHandler(h)
 	if err != nil {
-		return fmt.Errorf("inspecting handler: %v", err)
+		return fmt.Errorf("jsonrpc: %v", err)
 	}
-
 	s.handler.Store(method, handlerType{h, ptype, rtype})
-
 	return nil
 }
 
@@ -63,12 +55,17 @@ func inspectHandler(h reflect.Value) (ptype, rtype reflect.Type, err error) {
 		return
 	}
 
-	if ht.NumIn() != 1 {
-		err = fmt.Errorf("invalid number of args: expected %v, got %v", 1, ht.NumIn())
+	if ht.NumIn() != 2 {
+		err = fmt.Errorf("invalid number of args: expected %v, got %v", 2, ht.NumIn())
 		return
 	}
 
-	ptype = ht.In(0)
+	if ctxType := ht.In(0); ctxType != typeOfContext {
+		err = fmt.Errorf("invalid arg[0] type: should be context.Context")
+		return
+	}
+
+	ptype = ht.In(1)
 	if !isExportedOrBuiltinType(ptype) {
 		err = fmt.Errorf("invalid arg type: expected exported or builtin")
 		return
@@ -89,11 +86,10 @@ func inspectHandler(h reflect.Value) (ptype, rtype reflect.Type, err error) {
 		err = fmt.Errorf("invalid error type, should be exported or builtin")
 		return
 	}
-	log.Printf("handler = func (%v) (%v, error)", ptype, rtype)
 	return
 }
 
-func (s *Server) handleHTTP(rw http.ResponseWriter, r *http.Request) {
+func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	// Only POST methods are jsonrpc valid calls
 	if r.Method != "POST" {
 		rw.WriteHeader(http.StatusNotFound)
@@ -101,6 +97,7 @@ func (s *Server) handleHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
 	req, err := decodeRequest(r.Body)
 	defer r.Body.Close()
 	if err != nil {
@@ -109,8 +106,6 @@ func (s *Server) handleHTTP(rw http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
-	log.Printf("request:%v, %v", req, err)
 
 	method, ok := s.handler.Load(req.Method)
 	if !ok {
@@ -122,7 +117,7 @@ func (s *Server) handleHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	htype, _ := method.(handlerType)
-	result, err := callMethod(req, htype)
+	result, err := callMethod(ctx, req, htype)
 	if err != nil && err == errServerMarshalParams {
 		if err := encodeMessage(rw, newErrorResponse(req.ID, errInvalidParams)); err != nil {
 			log.Printf("encoding err message: %v", err)
@@ -135,37 +130,37 @@ func (s *Server) handleHTTP(rw http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
 	resp := &Response{ID: req.ID, Error: nil, Result: (*json.RawMessage)(&result)}
 	if err := encodeMessage(rw, resp); err != nil {
 		log.Printf("encoding message to http.ResponseWriter: %v", err)
 	}
 }
 
-func callMethod(req *Request, htype handlerType) (json.RawMessage, error) {
-	var pvalue reflect.Value
+func callMethod(ctx context.Context, req *Request, htype handlerType) (json.RawMessage, error) {
+	var pvalue, pzero reflect.Value
 	pIsValue := false
 	if htype.ptype.Kind() == reflect.Ptr {
 		pvalue = reflect.New(htype.ptype.Elem())
+		pzero = reflect.New(htype.ptype.Elem())
 	} else {
 		pvalue = reflect.New(htype.ptype)
+		pzero = reflect.New(htype.ptype)
 		pIsValue = true
 	}
-	pzero := pvalue.Elem()
 
 	// here pvalue is guaranteed to be a ptr
 	// QUESTION: if pvalue doesnt change params should be invalid?
 	if err := json.Unmarshal(*req.Params, pvalue.Interface()); err != nil || reflect.DeepEqual(pzero, pvalue.Elem()) {
 		// invalid params?
-		log.Printf("invalid params: %v", string(*req.Params))
+		log.Printf("invalid params: %v, %v", string(*req.Params), err)
 		return nil, errServerMarshalParams
 	}
 
 	var outv []reflect.Value
 	if pIsValue {
-		outv = htype.f.Call([]reflect.Value{pvalue.Elem()})
+		outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue.Elem()})
 	} else {
-		outv = htype.f.Call([]reflect.Value{pvalue})
+		outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue})
 	}
 
 	result, err := json.Marshal(outv[0].Interface())
@@ -174,12 +169,6 @@ func callMethod(req *Request, htype handlerType) (json.RawMessage, error) {
 		return nil, errServerUnmarshalReturn
 	}
 	return result, nil
-}
-
-func (s *Server) ListenAndServe(addr string) {
-	http.HandleFunc(s.path, s.handleHTTP)
-
-	http.ListenAndServe(addr, nil)
 }
 
 func isExportedOrBuiltinType(t reflect.Type) bool {

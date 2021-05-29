@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,8 @@ type httpClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+var errClientContextCanceled = errors.New("context canceled by the client")
+
 // NewClient returns a new Client to handle requests to the JSON-RPC server at the other end of the connection.
 // TODO: support custom httpClients
 func NewClient(url string) *Client {
@@ -32,7 +35,7 @@ func (c *Client) Call(ctx context.Context, method string, params, reply interfac
 	go c.call(ctx, method, params, reply, done)
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("waiting response: %w", ctx.Err())
+		return fmt.Errorf("jsonrpc: %v", ctx.Err())
 	case err := <-done:
 		return err
 	}
@@ -42,31 +45,31 @@ func (c *Client) Call(ctx context.Context, method string, params, reply interfac
 func (c *Client) call(ctx context.Context, method string, params, reply interface{}, done chan error) {
 	p, err := json.Marshal(params)
 	if err != nil {
-		done <- fmt.Errorf("marshaling jsonrpc params: %w", err)
+		done <- fmt.Errorf("jsonrpc: marshaling params: %w", err)
 		return
 	}
-	req := &Request{
-		ID:     c.nextID(),
-		Method: method,
-		Params: (*json.RawMessage)(&p),
-	}
+	req := &Request{ID: c.nextID(), Method: method, Params: (*json.RawMessage)(&p)}
 
 	buf := &bytes.Buffer{}
 	if err := encodeMessage(buf, req); err != nil {
-		done <- fmt.Errorf("encoding jsonrpc request: %w", err)
+		done <- fmt.Errorf("jsonrpc: encoding request: %w", err)
 		return
 	}
 
 	rc, err := c.send(ctx, buf)
+	if errors.Is(err, errClientContextCanceled) {
+		done <- errClientContextCanceled
+		return
+	}
 	if err != nil {
-		done <- fmt.Errorf("sending jsonrpc request: %w", err)
+		done <- fmt.Errorf("jsonrpc: sending request: %w", err)
 		return
 	}
 	defer rc.Close()
 
 	res, err := decodeResponse(rc)
 	if err != nil {
-		done <- fmt.Errorf("decoding jsonrpc response: %w", err)
+		done <- fmt.Errorf("jsonrpc: decoding response: %w", err)
 		return
 	}
 
@@ -84,8 +87,11 @@ func (c *Client) send(ctx context.Context, r io.Reader) (io.ReadCloser, error) {
 	hreq.Header.Set("Accept", "application/json")
 
 	hres, err := c.httpClient.Do(hreq)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return nil, errClientContextCanceled
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed sending request: %w", err)
+		return nil, fmt.Errorf("sending request: %w", err)
 	}
 	return hres.Body, nil
 }

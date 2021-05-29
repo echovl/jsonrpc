@@ -85,34 +85,46 @@ func TestClientCallTimeout(t *testing.T) {
 	err := client.Call(ctx, "echo", msg, reply)
 
 	// then
-	if err == nil || err.Error() != "waiting response: context deadline exceeded" {
-		t.Errorf("invalid err message\ngot: %v\nwant: %v", err, "waiting response: context deadline exceeded")
+	if err == nil || err.Error() != "jsonrpc: context deadline exceeded" {
+		t.Errorf("invalid err message\ngot: %v\nwant: %v", err, "jsonrpc: context deadline exceeded")
 	}
 }
 
 func newEchoServer(t testing.TB, sleep bool) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		if sleep {
-			time.Sleep(2 * time.Millisecond)
-		}
-		data, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			t.Errorf("reading server request: %w", err)
-			return
-		}
-		defer r.Body.Close()
+		done := make(chan string)
 
-		req := &body{}
-		if err := json.Unmarshal(data, req); err != nil {
-			t.Errorf("unmarshaling server request: %w", err)
-			return
-		}
+		go func() {
+			if sleep {
+				time.Sleep(time.Millisecond)
+			}
 
-		msg := &echoMessage{}
-		if err := json.Unmarshal(*req.Params, msg); err != nil {
-			t.Errorf("unmarshaling jsonrpc params: %w", err)
-		}
+			data, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				t.Errorf("reading server request: %w", err)
+				return
+			}
+			defer r.Body.Close()
 
-		fmt.Fprintf(rw, `{"jsonrpc": "2.0", "result": {"message":"%v"}, "id": %v}`, msg.String, req.ID)
+			req := &body{}
+			if err := json.Unmarshal(data, req); err != nil {
+				t.Errorf("unmarshaling server request: %w", err)
+				return
+			}
+
+			msg := &echoMessage{}
+			if err := json.Unmarshal(*req.Params, msg); err != nil {
+				t.Errorf("unmarshaling jsonrpc params: %w", err)
+			}
+			done <- fmt.Sprintf(`{"jsonrpc": "2.0", "result": {"message":"%v"}, "id": %v}`, msg.String, req.ID)
+		}()
+
+		select {
+		case <-r.Context().Done():
+			fmt.Fprintf(rw, `{"jsonrpc": "2.0", "result": {"message":"timeout"}, "id": 1}`)
+		case msg := <-done:
+			fmt.Fprintf(rw, msg)
+
+		}
 	}))
 }
