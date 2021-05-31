@@ -21,6 +21,7 @@ var (
 	errServerInvalidOutput = errors.New("invalid return type format")
 )
 
+// Server represents a JSON-RPC server.
 type Server struct {
 	handler sync.Map
 }
@@ -32,12 +33,12 @@ type handlerType struct {
 	numArgs int
 }
 
+// NewServer returns a new Server.
 func NewServer() *Server {
 	return &Server{}
 }
 
-// handler should be a func (params) (result, error)
-// params and result should be an exported type (or builtin)
+// HandleFunc registers the handle function for the given JSON-RPC method.
 func (s *Server) HandleFunc(method string, handler interface{}) error {
 	h := reflect.ValueOf(handler)
 	numArgs, ptype, rtype, err := inspectHandler(h)
@@ -92,6 +93,7 @@ func inspectHandler(h reflect.Value) (numArgs int, ptype, rtype reflect.Type, er
 	return
 }
 
+// ServeHTTP responds to an JSON-RPC request and executes the requested method.
 func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	// Only POST methods are jsonrpc valid calls
 	if r.Method != "POST" {

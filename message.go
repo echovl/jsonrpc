@@ -15,7 +15,7 @@ var (
 
 // message represents jsonrpc messages that can be marshal to a raw jsonrpc object
 type message interface {
-	marshal() body
+	marshal() rawMessage
 }
 
 func writeMessage(w io.Writer, msg message) error {
@@ -34,8 +34,8 @@ type Request struct {
 	Params *json.RawMessage
 }
 
-func (req *Request) marshal() body {
-	return body{ID: req.ID, Method: req.Method, Params: req.Params}
+func (req *Request) marshal() rawMessage {
+	return rawMessage{ID: req.ID, Method: req.Method, Params: req.Params}
 }
 
 // Request represents the response from a JSON-RPC request.
@@ -52,8 +52,8 @@ func (res *Response) Err() error {
 	return *res.Error
 }
 
-func (res *Response) marshal() body {
-	return body{ID: res.ID, Result: res.Result, Error: res.Error}
+func (res *Response) marshal() rawMessage {
+	return rawMessage{ID: res.ID, Result: res.Result, Error: res.Error}
 }
 
 func errResponse(id interface{}, err *Error) *Response {
@@ -62,7 +62,7 @@ func errResponse(id interface{}, err *Error) *Response {
 
 // DecodeRequest decodes a JSON-encoded body and returns a response message.
 func readResponse(r io.Reader) (*Response, error) {
-	msg := &body{}
+	msg := &rawMessage{}
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return nil, errInvalidEncodedJSON
 	}
@@ -77,7 +77,7 @@ func readResponse(r io.Reader) (*Response, error) {
 
 // readRequest decodes a JSON-encoded body and returns a request message.
 func readRequest(r io.Reader) (*Request, error) {
-	msg := &body{}
+	msg := &rawMessage{}
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return nil, errInvalidEncodedJSON
 	}

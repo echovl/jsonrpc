@@ -24,12 +24,13 @@ type httpClient interface {
 
 var errClientContextCanceled = errors.New("context canceled by the client")
 
-// NewClient returns a new Client to handle requests to the JSON-RPC server at the other end of the connection.
+// NewClient returns a new Client to handle requests to a JSON-RPC server.
 // TODO: support custom httpClients
 func NewClient(url string) *Client {
 	return &Client{url: url, httpClient: http.DefaultClient}
 }
 
+// Call executes the named method, waits for it to complete, and returns its error status.
 func (c *Client) Call(ctx context.Context, method string, params, reply interface{}) error {
 	done := make(chan error)
 	go c.call(ctx, method, params, reply, done)

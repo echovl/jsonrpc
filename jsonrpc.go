@@ -15,8 +15,7 @@ var (
 	//ErrServerError    = Error{-32000, "Parse error", nil}
 )
 
-// TODO: add description
-type body struct {
+type rawMessage struct {
 	Version string           `json:"jsonrpc"`
 	ID      interface{}      `json:"id"`
 	Method  string           `json:"method,omitempty"`
@@ -25,12 +24,14 @@ type body struct {
 	Error   *Error           `json:"error,omitempty"`
 }
 
+// Error represents a JSON-RPC error, it implements the error interface.
 type Error struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"` // defined by the server
 }
 
+// Error returns the string representation of the error.
 func (e Error) Error() string {
 	return fmt.Sprint("jsonrpc: ", strings.ToLower(e.Message))
 }
