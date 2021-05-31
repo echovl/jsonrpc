@@ -96,7 +96,7 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	// Only POST methods are jsonrpc valid calls
 	if r.Method != "POST" {
 		rw.WriteHeader(http.StatusNotFound)
-		rw.Write([]byte("not found"))
+		rw.Write([]byte("Not found"))
 		return
 	}
 
@@ -126,6 +126,10 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, errServerInvalidOutput) {
 		sendMessage(rw, errResponse(req.ID, &ErrInternalError))
+		return
+	}
+	if err, ok := err.(Error); ok {
+		sendMessage(rw, errResponse(req.ID, &err))
 		return
 	}
 
@@ -172,6 +176,15 @@ func callMethod(ctx context.Context, req *Request, htype handlerType) (json.RawM
 		} else {
 			outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue})
 		}
+	}
+
+	outErr := outv[1].Interface()
+	switch err := outErr.(type) {
+	case Error:
+		return nil, err
+	case error:
+		return nil, Error{Code: -32000, Message: err.Error()}
+	default:
 	}
 
 	result, err := json.Marshal(outv[0].Interface())

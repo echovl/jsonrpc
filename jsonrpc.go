@@ -12,7 +12,7 @@ var (
 	ErrMethodNotFound = Error{-32601, "Method not found", nil}
 	ErrInvalidParams  = Error{-32602, "Invalid params", nil}
 	ErrInternalError  = Error{-32603, "Internal error", nil}
-	//errServerError    = bodyError{-32700, "Parse error", nil}
+	//ErrServerError    = Error{-32000, "Parse error", nil}
 )
 
 // TODO: add description

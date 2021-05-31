@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"sync"
@@ -73,6 +74,24 @@ var serveTestcases = []testcase{
 		resp:    `{"jsonrpc":"2.0","id":%v,"result":{"text":"text","boolean":true}}` + "\n",
 		f: func(ctx context.Context) (*Struct, error) {
 			return &Struct{Text: "text", Boolean: true}, nil
+		},
+	},
+	{
+		numArgs: 1,
+		name:    "nil_struct_error",
+		params:  nil,
+		resp:    `{"jsonrpc":"2.0","id":%v,"error":{"code":-32000,"message":"something went wrong"}}` + "\n",
+		f: func(ctx context.Context) (Struct, error) {
+			return Struct{}, errors.New("something went wrong")
+		},
+	},
+	{
+		numArgs: 1,
+		name:    "nil_struct_liberror",
+		params:  nil,
+		resp:    `{"jsonrpc":"2.0","id":%v,"error":{"code":-32603,"message":"Internal error"}}` + "\n",
+		f: func(ctx context.Context) (Struct, error) {
+			return Struct{}, ErrInternalError
 		},
 	},
 	// 2 args, 2 returns
@@ -171,7 +190,7 @@ var serveErrTestcases = []testcase{
 	},
 }
 
-var funcErrTestcases = []testcase{
+var handleFuncErrTestcases = []testcase{
 	{
 		name: "invalid_handler_type",
 		err:  "jsonrpc: invalid handler type: expected func, got string",
@@ -248,7 +267,7 @@ func TestHandleFunc(t *testing.T) {
 func TestHandleFuncErr(t *testing.T) {
 	server := NewServer()
 
-	for _, tc := range funcErrTestcases {
+	for _, tc := range handleFuncErrTestcases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := server.HandleFunc(tc.name, tc.f)
 			if err.Error() != tc.err {

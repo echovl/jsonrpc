@@ -41,7 +41,6 @@ func (c *Client) Call(ctx context.Context, method string, params, reply interfac
 	}
 }
 
-// TODO: we should parse and send response errors to the done channel
 func (c *Client) call(ctx context.Context, method string, params, reply interface{}, done chan error) {
 	p, err := json.Marshal(params)
 	if err != nil {
