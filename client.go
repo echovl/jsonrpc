@@ -51,30 +51,30 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 	req := &Request{ID: c.nextID(), Method: method, Params: (*json.RawMessage)(&p)}
 
 	buf := &bytes.Buffer{}
-	if err := encodeMessage(buf, req); err != nil {
+	if err := writeMessage(buf, req); err != nil {
 		done <- fmt.Errorf("jsonrpc: encoding request: %w", err)
 		return
 	}
 
 	rc, err := c.send(ctx, buf)
-	if errors.Is(err, errClientContextCanceled) {
-		done <- errClientContextCanceled
-		return
-	}
 	if err != nil {
 		done <- fmt.Errorf("jsonrpc: sending request: %w", err)
 		return
 	}
 	defer rc.Close()
 
-	res, err := decodeResponse(rc)
+	res, err := readResponse(rc)
 	if err != nil {
-		done <- fmt.Errorf("jsonrpc: decoding response: %w", err)
+		done <- fmt.Errorf("jsonrpc: reading response: %w", err)
+		return
+	}
+	if res.Err() != nil {
+		done <- res.Err()
 		return
 	}
 
 	if err := json.Unmarshal(*res.Result, reply); err != nil {
-		done <- err
+		done <- fmt.Errorf("jsonrpc: unmarshaling result: %w", err)
 		return
 	}
 	done <- nil
@@ -83,15 +83,15 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 // send sends data from r to the http server and returns a reader of the response
 func (c *Client) send(ctx context.Context, r io.Reader) (io.ReadCloser, error) {
 	hreq, err := http.NewRequestWithContext(ctx, "POST", c.url, r)
+	if err != nil {
+		return nil, err
+	}
 	hreq.Header.Set("Content-Type", "application/json")
 	hreq.Header.Set("Accept", "application/json")
 
 	hres, err := c.httpClient.Do(hreq)
-	if errors.Is(err, context.DeadlineExceeded) {
-		return nil, errClientContextCanceled
-	}
 	if err != nil {
-		return nil, fmt.Errorf("sending request: %w", err)
+		return nil, err
 	}
 	return hres.Body, nil
 }

@@ -17,8 +17,8 @@ var (
 	typeOfContext = reflect.TypeOf((*context.Context)(nil)).Elem()
 )
 var (
-	errServerMarshalParams   = errors.New("invalid request params type format")
-	errServerUnmarshalReturn = errors.New("invalid return type format")
+	errServerInvalidParams = errors.New("invalid request params type format")
+	errServerInvalidOutput = errors.New("invalid return type format")
 )
 
 type Server struct {
@@ -51,7 +51,7 @@ func (s *Server) HandleFunc(method string, handler interface{}) error {
 func inspectHandler(h reflect.Value) (numArgs int, ptype, rtype reflect.Type, err error) {
 	ht := h.Type()
 	if hkind := h.Kind(); hkind != reflect.Func {
-		err = fmt.Errorf("invalid handler type: expected %v, got %v", "func", hkind)
+		err = fmt.Errorf("invalid handler type: expected func, got %v", hkind)
 		return
 	}
 
@@ -62,14 +62,14 @@ func inspectHandler(h reflect.Value) (numArgs int, ptype, rtype reflect.Type, er
 	}
 
 	if ctxType := ht.In(0); ctxType != typeOfContext {
-		err = fmt.Errorf("invalid arg[0] type: should be context.Context")
+		err = fmt.Errorf("invalid first arg type: expected context.Context, got %v", ctxType)
 		return
 	}
 
 	if numArgs == 2 {
 		ptype = ht.In(1)
 		if !isExportedOrBuiltinType(ptype) {
-			err = fmt.Errorf("invalid arg type: expected exported or builtin")
+			err = fmt.Errorf("invalid second arg type: expected exported or builtin")
 			return
 		}
 	}
@@ -81,12 +81,12 @@ func inspectHandler(h reflect.Value) (numArgs int, ptype, rtype reflect.Type, er
 
 	rtype = ht.Out(0)
 	if !isExportedOrBuiltinType(rtype) {
-		err = fmt.Errorf("invalid return type: expected exported or builtin")
+		err = fmt.Errorf("invalid first return type: expected exported or builtin")
 		return
 	}
 
 	if errorType := ht.Out(1); errorType != typeOfError {
-		err = fmt.Errorf("invalid error type, should be exported or builtin")
+		err = fmt.Errorf("invalid second return type: expected error, got %v", errorType)
 		return
 	}
 	return
@@ -101,75 +101,83 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	req, err := decodeRequest(r.Body)
+	req, err := readRequest(r.Body)
 	defer r.Body.Close()
-	if err != nil {
-		if err := encodeMessage(rw, newErrorResponse(nil, errInvalidRequest)); err != nil {
-			log.Printf("decoding request message: %v", err)
-		}
+	if errors.Is(err, errInvalidEncodedJSON) {
+		sendMessage(rw, errResponse(nil, &ErrorParseError))
+		return
+	}
+	if errors.Is(err, errInvalidDecodedMessage) {
+		sendMessage(rw, errResponse(req.ID, &ErrInvalidRequest))
 		return
 	}
 
 	method, ok := s.handler.Load(req.Method)
 	if !ok {
-		log.Printf("method %v not found", req.Method)
-		if err := encodeMessage(rw, newErrorResponse(req.ID, errMethodNotFound)); err != nil {
-			log.Printf("encoding err message: %v", err)
-		}
+		sendMessage(rw, errResponse(req.ID, &ErrMethodNotFound))
 		return
 	}
 
 	htype, _ := method.(handlerType)
 	result, err := callMethod(ctx, req, htype)
-	if err != nil && err == errServerMarshalParams {
-		if err := encodeMessage(rw, newErrorResponse(req.ID, errInvalidParams)); err != nil {
-			log.Printf("encoding err message: %v", err)
-		}
+	if errors.Is(err, errServerInvalidParams) {
+		sendMessage(rw, errResponse(req.ID, &ErrInvalidParams))
 		return
 	}
-	if err != nil && err == errServerUnmarshalReturn {
-		if err := encodeMessage(rw, newErrorResponse(req.ID, errInternalError)); err != nil {
-			log.Printf("encoding err message: %v", err)
-		}
+	if errors.Is(err, errServerInvalidOutput) {
+		sendMessage(rw, errResponse(req.ID, &ErrInternalError))
 		return
 	}
-	resp := &Response{ID: req.ID, Error: nil, Result: (*json.RawMessage)(&result)}
-	if err := encodeMessage(rw, resp); err != nil {
-		log.Printf("encoding message to http.ResponseWriter: %v", err)
+
+	sendMessage(rw, &Response{
+		ID:     req.ID,
+		Error:  nil,
+		Result: (*json.RawMessage)(&result),
+	})
+}
+
+func sendMessage(rw http.ResponseWriter, msg message) {
+	if err := writeMessage(rw, msg); err != nil {
+		log.Printf("jsonrpc: sending response: %v", err)
 	}
 }
 
 func callMethod(ctx context.Context, req *Request, htype handlerType) (json.RawMessage, error) {
-	var pvalue, pzero reflect.Value
-	pIsValue := false
-	if htype.ptype.Kind() == reflect.Ptr {
-		pvalue = reflect.New(htype.ptype.Elem())
-		pzero = reflect.New(htype.ptype.Elem())
-	} else {
-		pvalue = reflect.New(htype.ptype)
-		pzero = reflect.New(htype.ptype)
-		pIsValue = true
-	}
-
-	// here pvalue is guaranteed to be a ptr
-	// QUESTION: if pvalue doesnt change params should be invalid?
-	if err := json.Unmarshal(*req.Params, pvalue.Interface()); err != nil || reflect.DeepEqual(pzero, pvalue.Elem()) {
-		// invalid params?
-		log.Printf("invalid params: %v, %v", string(*req.Params), err)
-		return nil, errServerMarshalParams
-	}
-
 	var outv []reflect.Value
-	if pIsValue {
-		outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue.Elem()})
+	if htype.numArgs == 1 {
+		outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx)})
 	} else {
-		outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue})
+		var pvalue, pzero reflect.Value
+		pIsValue := false
+		if htype.ptype.Kind() == reflect.Ptr {
+			pvalue = reflect.New(htype.ptype.Elem())
+			pzero = reflect.New(htype.ptype.Elem())
+		} else {
+			pvalue = reflect.New(htype.ptype)
+			pzero = reflect.New(htype.ptype)
+			pIsValue = true
+		}
+
+		// here pvalue is guaranteed to be a ptr
+		// QUESTION: if pvalue doesnt change params should be invalid?
+		if req.Params == nil {
+			return nil, errServerInvalidParams
+		}
+		if err := json.Unmarshal(*req.Params, pvalue.Interface()); err != nil || reflect.DeepEqual(pzero, pvalue.Elem()) {
+			return nil, errServerInvalidParams
+		}
+
+		if pIsValue {
+			outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue.Elem()})
+		} else {
+			outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue})
+		}
 	}
 
 	result, err := json.Marshal(outv[0].Interface())
 	if err != nil {
-		// internal error?
-		return nil, errServerUnmarshalReturn
+		// this should not happen if the output is well defined
+		return nil, errServerInvalidOutput
 	}
 	return result, nil
 }

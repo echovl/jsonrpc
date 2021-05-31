@@ -2,8 +2,15 @@ package jsonrpc
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"reflect"
+)
+
+var (
+	errInvalidEncodedJSON    = errors.New("invalid encoded json")
+	errInvalidDecodedMessage = errors.New("invalid decoded message")
 )
 
 // message represents jsonrpc messages that can be marshal to a raw jsonrpc object
@@ -11,10 +18,10 @@ type message interface {
 	marshal() body
 }
 
-func encodeMessage(w io.Writer, msg message) error {
+func writeMessage(w io.Writer, msg message) error {
 	b := msg.marshal()
 	b.Version = "2.0"
-	if err := json.NewEncoder(w).Encode(msg); err != nil {
+	if err := json.NewEncoder(w).Encode(b); err != nil {
 		return fmt.Errorf("marshaling jsonrpc message: %w", err)
 	}
 	return nil
@@ -35,45 +42,61 @@ func (req *Request) marshal() body {
 type Response struct {
 	ID     interface{}
 	Result *json.RawMessage
-	Error  *bodyError
+	Error  *Error
+}
+
+func (res *Response) Err() error {
+	if res.Error == nil {
+		return nil
+	}
+	return *res.Error
 }
 
 func (res *Response) marshal() body {
 	return body{ID: res.ID, Result: res.Result, Error: res.Error}
 }
 
-func newErrorResponse(id interface{}, err *bodyError) *Response {
+func errResponse(id interface{}, err *Error) *Response {
 	return &Response{ID: id, Result: nil, Error: err}
 }
 
 // DecodeRequest decodes a JSON-encoded body and returns a response message.
-func decodeResponse(r io.Reader) (*Response, error) {
+func readResponse(r io.Reader) (*Response, error) {
 	msg := &body{}
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
-		return nil, fmt.Errorf("unmarshaling jsonrpc message: %w", err)
+		return nil, errInvalidEncodedJSON
 	}
 	// TODO: validate id following jsonrpc spec
-	if msg.Method != "" {
-		// if method is present, this is a request
-		return nil, fmt.Errorf("malformed response: method present")
-	}
 	// TODO: parse error
 	result, err := json.Marshal(msg.Result)
-	if err != nil {
-		return nil, fmt.Errorf("unmarshaling jsonrpc result :%w", err)
+	if err != nil || msg.Method != "" {
+		return &Response{ID: msg.ID}, errInvalidDecodedMessage
 	}
-	return &Response{ID: msg.ID, Result: (*json.RawMessage)(&result), Error: nil}, nil
+	return &Response{ID: msg.ID, Result: (*json.RawMessage)(&result), Error: msg.Error}, nil
 }
 
-// decodeRequest decodes a JSON-encoded body and returns a request message.
-func decodeRequest(r io.Reader) (*Request, error) {
-	b := &body{}
-	if err := json.NewDecoder(r).Decode(b); err != nil {
-		return nil, fmt.Errorf("unmarshaling jsonrpc message: %w", err)
+// readRequest decodes a JSON-encoded body and returns a request message.
+func readRequest(r io.Reader) (*Request, error) {
+	msg := &body{}
+	if err := json.NewDecoder(r).Decode(msg); err != nil {
+		return nil, errInvalidEncodedJSON
 	}
 	// TODO: validate id following jsonrpc spec
-	if b.Method == "" {
-		return nil, fmt.Errorf("malformed request: missing method")
+	if msg.Method == "" || isValidID(msg.ID) {
+		return &Request{ID: msg.ID}, errInvalidDecodedMessage
 	}
-	return &Request{ID: b.ID, Method: b.Method, Params: b.Params}, nil
+	return &Request{ID: msg.ID, Method: msg.Method, Params: msg.Params}, nil
+}
+
+func isValidID(id interface{}) bool {
+	if id == nil {
+		return true
+	}
+
+	switch reflect.ValueOf(id).Kind() {
+	case reflect.String, reflect.Int, reflect.Float32:
+		return true
+	default:
+		return false
+	}
 }

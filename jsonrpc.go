@@ -1,29 +1,36 @@
-// TODO: add error struct and error codes
 package jsonrpc
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 var (
-	errParseError     = &bodyError{-32700, "Parse error", nil}
-	errInvalidRequest = &bodyError{-32600, "Invalid Request", nil}
-	errMethodNotFound = &bodyError{-32601, "Method not found", nil}
-	errInvalidParams  = &bodyError{-32602, "Invalid params", nil}
-	errInternalError  = &bodyError{-32603, "Server error", nil}
+	ErrorParseError   = Error{-32700, "Parse error", nil}
+	ErrInvalidRequest = Error{-32600, "Invalid Request", nil}
+	ErrMethodNotFound = Error{-32601, "Method not found", nil}
+	ErrInvalidParams  = Error{-32602, "Invalid params", nil}
+	ErrInternalError  = Error{-32603, "Internal error", nil}
 	//errServerError    = bodyError{-32700, "Parse error", nil}
 )
 
 // TODO: add description
 type body struct {
 	Version string           `json:"jsonrpc"`
-	ID      interface{}      `json:"id,omitempty"`
+	ID      interface{}      `json:"id"`
 	Method  string           `json:"method,omitempty"`
 	Params  *json.RawMessage `json:"params,omitempty"`
 	Result  *json.RawMessage `json:"result,omitempty"`
-	Error   *bodyError       `json:"error,omitempty"`
+	Error   *Error           `json:"error,omitempty"`
 }
 
-type bodyError struct {
-	Code    int
-	Message string
-	Data    interface{} // defined by the server
+type Error struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"` // defined by the server
+}
+
+func (e Error) Error() string {
+	return fmt.Sprint("jsonrpc: ", strings.ToLower(e.Message))
 }
