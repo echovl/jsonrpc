@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 )
 
 var (
@@ -60,14 +59,12 @@ func errResponse(id interface{}, err *Error) *Response {
 	return &Response{ID: id, Result: nil, Error: err}
 }
 
-// DecodeRequest decodes a JSON-encoded body and returns a response message.
+// readResponse decodes a JSON-encoded body and returns a response message.
 func readResponse(r io.Reader) (*Response, error) {
 	msg := &rawMessage{}
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return nil, errInvalidEncodedJSON
 	}
-	// TODO: validate id following jsonrpc spec
-	// TODO: parse error
 	result, err := json.Marshal(msg.Result)
 	if err != nil || msg.Method != "" {
 		return &Response{ID: msg.ID}, errInvalidDecodedMessage
@@ -81,22 +78,26 @@ func readRequest(r io.Reader) (*Request, error) {
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return nil, errInvalidEncodedJSON
 	}
-	// TODO: validate id following jsonrpc spec
-	if msg.Method == "" || isValidID(msg.ID) {
+	id, ok := parseID(msg.ID)
+	if msg.Method == "" || !ok {
 		return &Request{ID: msg.ID}, errInvalidDecodedMessage
 	}
-	return &Request{ID: msg.ID, Method: msg.Method, Params: msg.Params}, nil
+	return &Request{ID: id, Method: msg.Method, Params: msg.Params}, nil
 }
 
-func isValidID(id interface{}) bool {
+func parseID(id interface{}) (interface{}, bool) {
 	if id == nil {
-		return true
+		return nil, true
 	}
 
-	switch reflect.ValueOf(id).Kind() {
-	case reflect.String, reflect.Int, reflect.Float32:
-		return true
+	switch v := id.(type) {
+	case float32:
+		return int(v), true
+	case float64:
+		return int(v), true
+	case string:
+		return v, true
 	default:
-		return false
+		return nil, false
 	}
 }

@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http/httptest"
 	"sync"
 	"testing"
 )
 
 type testcase struct {
+	id      interface{}
 	numArgs int
 	name    string
 	f       interface{}
@@ -41,92 +41,102 @@ type unexported struct{}
 var serveTestcases = []testcase{
 	// 1 arg, 2 returns
 	{
+		id:      1,
 		numArgs: 1,
 		name:    "nil_string",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":%v,"result":"string"}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":1,"result":"string"}` + "\n",
 		f: func(ctx context.Context) (string, error) {
 			return "string", nil
 		},
 	},
 	{
+		id:      2,
 		numArgs: 1,
 		name:    "nil_int",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":%v,"result":33}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":2,"result":33}` + "\n",
 		f: func(ctx context.Context) (int, error) {
 			return 33, nil
 		},
 	},
 	{
+		id:      "3",
 		numArgs: 1,
 		name:    "nil_struct",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":%v,"result":{"text":"text","number":33,"boolean":true}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":"3","result":{"text":"text","number":33,"boolean":true}}` + "\n",
 		f: func(ctx context.Context) (Struct, error) {
 			return Struct{Text: "text", Number: 33, Boolean: true}, nil
 		},
 	},
 	{
+		id:      "randomid",
 		numArgs: 1,
 		name:    "nil_ptrstruct",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":%v,"result":{"text":"text","boolean":true}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":"randomid","result":{"text":"text","boolean":true}}` + "\n",
 		f: func(ctx context.Context) (*Struct, error) {
 			return &Struct{Text: "text", Boolean: true}, nil
 		},
 	},
 	{
+		id:      6,
 		numArgs: 1,
 		name:    "nil_struct_error",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":%v,"error":{"code":-32000,"message":"something went wrong"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":6,"error":{"code":-32000,"message":"something went wrong"}}` + "\n",
 		f: func(ctx context.Context) (Struct, error) {
 			return Struct{}, errors.New("something went wrong")
 		},
 	},
 	{
+		id:      7,
 		numArgs: 1,
 		name:    "nil_struct_liberror",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":%v,"error":{"code":-32603,"message":"Internal error"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"Internal error"}}` + "\n",
 		f: func(ctx context.Context) (Struct, error) {
 			return Struct{}, ErrInternalError
 		},
 	},
 	// 2 args, 2 returns
 	{
+		id:      "nanoid",
 		numArgs: 2,
 		name:    "string_string",
 		params:  "input",
-		resp:    `{"jsonrpc":"2.0","id":%v,"result":"input"}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":"nanoid","result":"input"}` + "\n",
 		f: func(ctx context.Context, s string) (string, error) {
 			return s, nil
 		},
 	},
 	{
+		id:      10,
 		numArgs: 2,
 		name:    "int_int",
 		params:  33,
-		resp:    `{"jsonrpc":"2.0","id":%v,"result":33}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":10,"result":33}` + "\n",
 		f: func(ctx context.Context, n int) (int, error) {
 			return n, nil
 		},
 	},
 	{
+		id:      11,
 		numArgs: 2,
 		name:    "struct_struct",
 		params:  Struct{Text: "text", Number: 33},
-		resp:    `{"jsonrpc":"2.0","id":%v,"result":{"text":"text","number":33}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":11,"result":{"text":"text","number":33}}` + "\n",
 		f: func(ctx context.Context, s Struct) (Struct, error) {
 			return s, nil
 		},
 	},
 	{
+		id:      33,
 		numArgs: 2,
 		name:    "ptrstruct_struct",
 		params:  &Struct{Text: "text", Number: 33},
-		resp:    `{"jsonrpc":"2.0","id":%v,"result":{"text":"text","number":33}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":33,"result":{"text":"text","number":33}}` + "\n",
 		f: func(ctx context.Context, s *Struct) (Struct, error) {
 			return *s, nil
 		},
@@ -299,7 +309,7 @@ func TestServeSync(t *testing.T) {
 	type request struct {
 		VersionTag string      `json:"jsonrpc"`
 		Method     string      `json:"method"`
-		ID         int         `json:"id"`
+		ID         interface{} `json:"id"`
 		Params     interface{} `json:"params"`
 	}
 
@@ -308,12 +318,12 @@ func TestServeSync(t *testing.T) {
 		server.HandleFunc(h.name, h.f)
 	}
 
-	for id, tc := range serveTestcases {
+	for _, tc := range serveTestcases {
 		t.Run(tc.name, func(t *testing.T) {
 			body, err := json.Marshal(&request{
 				VersionTag: "2.0",
 				Method:     tc.name,
-				ID:         id,
+				ID:         tc.id,
 				Params:     tc.params,
 			})
 			if err != nil {
@@ -322,7 +332,7 @@ func TestServeSync(t *testing.T) {
 			req := httptest.NewRequest("POST", "locahost:8080", bytes.NewReader(body))
 			rw := httptest.NewRecorder()
 			server.ServeHTTP(rw, req)
-			want := fmt.Sprintf(tc.resp, id)
+			want := tc.resp
 
 			if got := rw.Body.String(); got != want {
 				t.Errorf("invalid jsonrpc response: \ngot: %v\nwant: %v\n", got, want)
@@ -335,7 +345,7 @@ func TestServeAsync(t *testing.T) {
 	type request struct {
 		VersionTag string      `json:"jsonrpc"`
 		Method     string      `json:"method"`
-		ID         int         `json:"id"`
+		ID         interface{} `json:"id"`
 		Params     interface{} `json:"params"`
 	}
 
@@ -346,8 +356,8 @@ func TestServeAsync(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(len(serveTestcases))
-	for id, tc := range serveTestcases {
-		go func(tc testcase, id int) {
+	for _, tc := range serveTestcases {
+		go func(tc testcase, id interface{}) {
 			t.Run(tc.name, func(t *testing.T) {
 				body, err := json.Marshal(&request{
 					VersionTag: "2.0",
@@ -361,14 +371,14 @@ func TestServeAsync(t *testing.T) {
 				req := httptest.NewRequest("POST", "locahost:8080", bytes.NewReader(body))
 				rw := httptest.NewRecorder()
 				server.ServeHTTP(rw, req)
-				want := fmt.Sprintf(tc.resp, id)
+				want := tc.resp
 
 				if got := rw.Body.String(); got != want {
 					t.Errorf("invalid jsonrpc response: \ngot: %v\nwant: %v\n", got, want)
 				}
 				wg.Done()
 			})
-		}(tc, id)
+		}(tc, tc.id)
 	}
 	wg.Wait()
 }
