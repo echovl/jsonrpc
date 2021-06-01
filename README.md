@@ -4,7 +4,7 @@ A go implementation of JSON RPC 2.0 over http. Work in progress.
 
 ## Installing
 
-To start using this library, install Go 1.12 or above. Run the following command to retrieve the library.
+To start using this library, install Go 1.13 or above. Run the following command to retrieve the library.
 
 ```sh
 $ go get -u github.com/echovl/jsonrpc
