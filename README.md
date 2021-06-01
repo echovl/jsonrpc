@@ -40,3 +40,30 @@ func main() {
 }
 
 ```
+## Client
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/echovl/jsonrpc"
+)
+
+type User struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+func main() {
+	client := jsonrpc.NewClient("http://127.0.0.1:4545/api")
+	user := &User{}
+	err := client.Call(context.Background(), "getUserById", "id", &user)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("user: ", user)
+}
+```
