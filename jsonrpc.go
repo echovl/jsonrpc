@@ -1,7 +1,6 @@
 package jsonrpc
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -14,15 +13,6 @@ var (
 	ErrInternalError  = Error{-32603, "Internal error", nil}
 	//ErrServerError    = Error{-32000, "Parse error", nil}
 )
-
-type rawMessage struct {
-	Version string           `json:"jsonrpc"`
-	ID      interface{}      `json:"id"`
-	Method  string           `json:"method,omitempty"`
-	Params  *json.RawMessage `json:"params,omitempty"`
-	Result  *json.RawMessage `json:"result,omitempty"`
-	Error   *Error           `json:"error,omitempty"`
-}
 
 // Error represents a JSON-RPC error, it implements the error interface.
 type Error struct {

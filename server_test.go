@@ -141,6 +141,16 @@ var serveTestcases = []testcase{
 			return *s, nil
 		},
 	},
+	{
+		id:      nil,
+		numArgs: 2,
+		name:    "notification_struct_struct",
+		params:  Struct{Text: "text", Number: 33},
+		resp:    ``,
+		f: func(ctx context.Context, s Struct) (Struct, error) {
+			return s, nil
+		},
+	},
 }
 
 var serveErrTestcases = []testcase{
@@ -164,18 +174,18 @@ var serveErrTestcases = []testcase{
 	},
 	{
 		numArgs: 2,
-		name:    "missing_method",
-		req:     `{"jsonrpc":"2.0","id":1,"params":[]}`,
-		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}` + "\n",
+		name:    "method_not_found_without_id",
+		req:     `{"jsonrpc":"2.0","method":"garbage_text","params":[]}`,
+		resp:    `{"jsonrpc":"2.0","id":null,"error":{"code":-32601,"message":"Method not found"}}` + "\n",
 		f: func(ctx context.Context, s string) (string, error) {
 			return "string", nil
 		},
 	},
 	{
 		numArgs: 2,
-		name:    "missing_id",
-		req:     `{"jsonrpc":"2.0","params":[]}`,
-		resp:    `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid Request"}}` + "\n",
+		name:    "missing_method",
+		req:     `{"jsonrpc":"2.0","id":1,"params":[]}`,
+		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}` + "\n",
 		f: func(ctx context.Context, s string) (string, error) {
 			return "string", nil
 		},
@@ -309,7 +319,7 @@ func TestServeSync(t *testing.T) {
 	type request struct {
 		VersionTag string      `json:"jsonrpc"`
 		Method     string      `json:"method"`
-		ID         interface{} `json:"id"`
+		ID         interface{} `json:"id,omitempty"`
 		Params     interface{} `json:"params"`
 	}
 
@@ -345,7 +355,7 @@ func TestServeAsync(t *testing.T) {
 	type request struct {
 		VersionTag string      `json:"jsonrpc"`
 		Method     string      `json:"method"`
-		ID         interface{} `json:"id"`
+		ID         interface{} `json:"id,omitempty"`
 		Params     interface{} `json:"params"`
 	}
 

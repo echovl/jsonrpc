@@ -10,7 +10,32 @@ import (
 var (
 	errInvalidEncodedJSON    = errors.New("invalid encoded json")
 	errInvalidDecodedMessage = errors.New("invalid decoded message")
+	null                     = json.RawMessage([]byte("null"))
 )
+
+type rawMessage struct {
+	Version string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id,omitempty"`
+	Method  string          `json:"method,omitempty"`
+	Params  json.RawMessage `json:"params,omitempty"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   *Error          `json:"error,omitempty"`
+}
+
+// Request represents a JSON-RPC request received by a server or to be send by a client.
+type Request struct {
+	ID             json.RawMessage
+	Method         string
+	Params         json.RawMessage
+	isNotification bool
+}
+
+// Request represents the response from a JSON-RPC request.
+type Response struct {
+	ID     json.RawMessage
+	Result json.RawMessage
+	Error  *Error
+}
 
 // message represents jsonrpc messages that can be marshal to a raw jsonrpc object
 type message interface {
@@ -26,22 +51,8 @@ func writeMessage(w io.Writer, msg message) error {
 	return nil
 }
 
-// Request represents a JSON-RPC request received by a server or to be send by a client.
-type Request struct {
-	ID     interface{}
-	Method string
-	Params *json.RawMessage
-}
-
 func (req *Request) marshal() rawMessage {
 	return rawMessage{ID: req.ID, Method: req.Method, Params: req.Params}
-}
-
-// Request represents the response from a JSON-RPC request.
-type Response struct {
-	ID     interface{}
-	Result *json.RawMessage
-	Error  *Error
 }
 
 func (res *Response) Err() error {
@@ -55,8 +66,13 @@ func (res *Response) marshal() rawMessage {
 	return rawMessage{ID: res.ID, Result: res.Result, Error: res.Error}
 }
 
-func errResponse(id interface{}, err *Error) *Response {
-	return &Response{ID: id, Result: nil, Error: err}
+func errResponse(id json.RawMessage, err *Error) *Response {
+	resp := &Response{ID: id, Result: nil, Error: err}
+	// If there was an error in detecting the id in the Request object, ID should be Null
+	if id == nil {
+		resp.ID = null
+	}
+	return resp
 }
 
 // readResponse decodes a JSON-encoded body and returns a response message.
@@ -69,7 +85,7 @@ func readResponse(r io.Reader) (*Response, error) {
 	if err != nil || msg.Method != "" {
 		return &Response{ID: msg.ID}, errInvalidDecodedMessage
 	}
-	return &Response{ID: msg.ID, Result: (*json.RawMessage)(&result), Error: msg.Error}, nil
+	return &Response{ID: msg.ID, Result: (json.RawMessage)(result), Error: msg.Error}, nil
 }
 
 // readRequest decodes a JSON-encoded body and returns a request message.
@@ -78,11 +94,16 @@ func readRequest(r io.Reader) (*Request, error) {
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return nil, errInvalidEncodedJSON
 	}
-	id, ok := parseID(msg.ID)
-	if msg.Method == "" || !ok {
-		return &Request{ID: msg.ID}, errInvalidDecodedMessage
+
+	req := &Request{ID: msg.ID, Method: msg.Method, Params: msg.Params}
+	if msg.ID == nil {
+		req.isNotification = true
 	}
-	return &Request{ID: id, Method: msg.Method, Params: msg.Params}, nil
+	//id, ok := parseID(msg.ID)
+	if msg.Method == "" {
+		return req, errInvalidDecodedMessage
+	}
+	return req, nil
 }
 
 func parseID(id interface{}) (interface{}, bool) {
