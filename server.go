@@ -18,7 +18,7 @@ var (
 )
 var (
 	errServerInvalidParams = errors.New("invalid request params type format")
-	errServerInvalidOutput = errors.New("invalid return type format")
+	errServerInvalidReturn = errors.New("invalid return type format")
 )
 
 // Server represents a JSON-RPC server.
@@ -106,7 +106,7 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	req, err := readRequest(r.Body)
 	defer r.Body.Close()
 	if errors.Is(err, errInvalidEncodedJSON) {
-		sendMessage(rw, errResponse(nil, &ErrorParseError))
+		sendMessage(rw, errResponse(null, &ErrorParseError))
 		return
 	}
 	if errors.Is(err, errInvalidDecodedMessage) {
@@ -121,12 +121,25 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	htype, _ := method.(handlerType)
-	result, err := callMethod(ctx, req, htype)
+	if req.isNotification {
+		_, err := callMethod(ctx, req, htype)
+		if errors.Is(err, errServerInvalidParams) {
+			log.Print("jsonrpc: notification: ", err)
+			return
+		}
+		rw.WriteHeader(http.StatusAccepted)
+		rw.Write([]byte(""))
+		return
+	}
+
+	ret, err := callMethod(ctx, req, htype)
 	if errors.Is(err, errServerInvalidParams) {
 		sendMessage(rw, errResponse(req.ID, &ErrInvalidParams))
 		return
 	}
-	if errors.Is(err, errServerInvalidOutput) {
+
+	result, err := encodeMethodReturn(ret)
+	if errors.Is(err, errServerInvalidReturn) {
 		sendMessage(rw, errResponse(req.ID, &ErrInternalError))
 		return
 	}
@@ -138,7 +151,7 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	sendMessage(rw, &Response{
 		ID:     req.ID,
 		Error:  nil,
-		Result: (*json.RawMessage)(&result),
+		Result: (json.RawMessage)(result),
 	})
 }
 
@@ -148,39 +161,43 @@ func sendMessage(rw http.ResponseWriter, msg message) {
 	}
 }
 
-func callMethod(ctx context.Context, req *Request, htype handlerType) (json.RawMessage, error) {
-	var outv []reflect.Value
+func callMethod(ctx context.Context, req *Request, htype handlerType) ([]reflect.Value, error) {
+	var retv []reflect.Value
 	if htype.numArgs == 1 {
-		outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx)})
-	} else {
-		var pvalue, pzero reflect.Value
-		pIsValue := false
-		if htype.ptype.Kind() == reflect.Ptr {
-			pvalue = reflect.New(htype.ptype.Elem())
-			pzero = reflect.New(htype.ptype.Elem())
-		} else {
-			pvalue = reflect.New(htype.ptype)
-			pzero = reflect.New(htype.ptype)
-			pIsValue = true
-		}
-
-		// here pvalue is guaranteed to be a ptr
-		// QUESTION: if pvalue doesnt change params should be invalid?
-		if req.Params == nil {
-			return nil, errServerInvalidParams
-		}
-		if err := json.Unmarshal(*req.Params, pvalue.Interface()); err != nil || reflect.DeepEqual(pzero, pvalue.Elem()) {
-			return nil, errServerInvalidParams
-		}
-
-		if pIsValue {
-			outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue.Elem()})
-		} else {
-			outv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue})
-		}
+		retv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx)})
+		return retv, nil
 	}
 
-	outErr := outv[1].Interface()
+	var pvalue, pzero reflect.Value
+	pIsValue := false
+	if htype.ptype.Kind() == reflect.Ptr {
+		pvalue = reflect.New(htype.ptype.Elem())
+		pzero = reflect.New(htype.ptype.Elem())
+	} else {
+		pvalue = reflect.New(htype.ptype)
+		pzero = reflect.New(htype.ptype)
+		pIsValue = true
+	}
+
+	// here pvalue is guaranteed to be a ptr
+	// QUESTION: if pvalue doesnt change params should be invalid?
+	if req.Params == nil || string(req.Params) == string(null) {
+		return nil, errServerInvalidParams
+	}
+	if err := json.Unmarshal(req.Params, pvalue.Interface()); err != nil || reflect.DeepEqual(pzero, pvalue.Elem()) {
+		return nil, errServerInvalidParams
+	}
+
+	if pIsValue {
+		retv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue.Elem()})
+	} else {
+		retv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx), pvalue})
+	}
+	return retv, nil
+}
+
+func encodeMethodReturn(ret []reflect.Value) (json.RawMessage, error) {
+	outErr := ret[1].Interface()
 	switch err := outErr.(type) {
 	case Error:
 		return nil, err
@@ -189,10 +206,10 @@ func callMethod(ctx context.Context, req *Request, htype handlerType) (json.RawM
 	default:
 	}
 
-	result, err := json.Marshal(outv[0].Interface())
+	result, err := json.Marshal(ret[0].Interface())
 	if err != nil {
 		// this should not happen if the output is well defined
-		return nil, errServerInvalidOutput
+		return nil, errServerInvalidReturn
 	}
 	return result, nil
 }

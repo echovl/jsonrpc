@@ -30,10 +30,20 @@ func slow(ctx context.Context) (Reply, error) {
 	return Reply{}, nil
 }
 
+type state struct {
+	N int
+}
+
+func (s *state) increaseCounter(ctx context.Context, add int) (int, error) {
+	s.N += add
+	return s.N, nil
+}
+
 var port = ":4545"
 
 func TestCallSync(t *testing.T) {
-	go startServer(t)
+	counter := &state{}
+	go startServer(t, counter)
 
 	client := NewClient("http://localhost" + port)
 
@@ -72,12 +82,45 @@ func TestCallSync(t *testing.T) {
 	if errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Context canceled: expected context.DeadlineExceeded, got %v", err)
 	}
+
+	// Notification
+	err = client.Notify(context.Background(), "counter", 3)
+	if err != nil {
+		t.Errorf("counter: error not expected: %v", err)
+	}
+	if counter.N != 3 {
+		t.Errorf("counter: bad state counter:\ngot: %v\nwant: %v", counter.N, 3)
+	}
+
 }
 
-func startServer(t *testing.T) {
+func BenchmarkClientSync(b *testing.B) {
+	b.Run("call", func(b *testing.B) {
+		client := NewClient("http://localhost" + port)
+		for i := 0; i < b.N; i++ {
+			var reply int
+			err := client.Call(context.Background(), "counter", 6, &reply)
+			if err != nil {
+				panic(err)
+			}
+		}
+	})
+	b.Run("notify", func(b *testing.B) {
+		client := NewClient("http://localhost" + port)
+		for i := 0; i < b.N; i++ {
+			err := client.Notify(context.Background(), "counter", 6)
+			if err != nil {
+				panic(err)
+			}
+		}
+	})
+}
+
+func startServer(t *testing.T, counter *state) {
 	s := NewServer()
 	s.HandleFunc("sum", sum)
 	s.HandleFunc("random", random)
+	s.HandleFunc("counter", counter.increaseCounter)
 
 	if err := http.ListenAndServe(port, s); err != nil {
 		t.Errorf("starting server: %v", err)

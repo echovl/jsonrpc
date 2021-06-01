@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"sync/atomic"
 )
 
@@ -42,14 +43,48 @@ func (c *Client) Call(ctx context.Context, method string, params, reply interfac
 	}
 }
 
+// Notify executes the named method and discards the response.
+func (c *Client) Notify(ctx context.Context, method string, params interface{}) error {
+	done := make(chan error)
+	go c.notify(ctx, method, params, done)
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("jsonrpc: %v", ctx.Err())
+	case err := <-done:
+		return err
+	}
+}
+
+func (c *Client) notify(ctx context.Context, method string, params interface{}, done chan error) {
+	p, err := json.Marshal(params)
+	if err != nil {
+		done <- fmt.Errorf("jsonrpc: marshaling params: %w", err)
+		return
+	}
+	req := &Request{ID: nil, Method: method, Params: p}
+	buf := &bytes.Buffer{}
+	if err := writeMessage(buf, req); err != nil {
+		done <- fmt.Errorf("jsonrpc: encoding request: %w", err)
+		return
+	}
+
+	rc, err := c.send(ctx, buf)
+	if err != nil {
+		done <- fmt.Errorf("jsonrpc: sending request: %w", err)
+		return
+	}
+	defer rc.Close()
+
+	done <- nil
+}
+
 func (c *Client) call(ctx context.Context, method string, params, reply interface{}, done chan error) {
 	p, err := json.Marshal(params)
 	if err != nil {
 		done <- fmt.Errorf("jsonrpc: marshaling params: %w", err)
 		return
 	}
-	req := &Request{ID: c.nextID(), Method: method, Params: (*json.RawMessage)(&p)}
-
+	req := &Request{ID: c.nextID(), Method: method, Params: p}
 	buf := &bytes.Buffer{}
 	if err := writeMessage(buf, req); err != nil {
 		done <- fmt.Errorf("jsonrpc: encoding request: %w", err)
@@ -73,7 +108,7 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 		return
 	}
 
-	if err := json.Unmarshal(*res.Result, reply); err != nil {
+	if err := json.Unmarshal(res.Result, reply); err != nil {
 		done <- fmt.Errorf("jsonrpc: unmarshaling result: %w", err)
 		return
 	}
@@ -97,6 +132,7 @@ func (c *Client) send(ctx context.Context, r io.Reader) (io.ReadCloser, error) {
 }
 
 // nextID returns the next id using atomic operations
-func (c *Client) nextID() int64 {
-	return atomic.AddInt64(&c.next, 1)
+func (c *Client) nextID() json.RawMessage {
+	id := atomic.AddInt64(&c.next, 1)
+	return json.RawMessage(strconv.FormatInt(id, 10))
 }
