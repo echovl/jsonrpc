@@ -22,8 +22,8 @@ type rawMessage struct {
 	Error   *Error          `json:"error,omitempty"`
 }
 
-// Request represents a JSON-RPC request received by a server or to be send by a client.
-type Request struct {
+// request represents a JSON-RPC request received by a server or to be send by a client.
+type request struct {
 	ID             json.RawMessage
 	Method         string
 	Params         json.RawMessage
@@ -31,7 +31,7 @@ type Request struct {
 }
 
 // Request represents the response from a JSON-RPC request.
-type Response struct {
+type response struct {
 	ID     json.RawMessage
 	Result json.RawMessage
 	Error  *Error
@@ -51,23 +51,23 @@ func writeMessage(w io.Writer, msg message) error {
 	return nil
 }
 
-func (req *Request) marshal() rawMessage {
+func (req *request) marshal() rawMessage {
 	return rawMessage{ID: req.ID, Method: req.Method, Params: req.Params}
 }
 
-func (res *Response) Err() error {
+func (res *response) Err() error {
 	if res.Error == nil {
 		return nil
 	}
 	return *res.Error
 }
 
-func (res *Response) marshal() rawMessage {
+func (res *response) marshal() rawMessage {
 	return rawMessage{ID: res.ID, Result: res.Result, Error: res.Error}
 }
 
-func errResponse(id json.RawMessage, err *Error) *Response {
-	resp := &Response{ID: id, Result: nil, Error: err}
+func errResponse(id json.RawMessage, err *Error) *response {
+	resp := &response{ID: id, Result: nil, Error: err}
 	// If there was an error in detecting the id in the Request object, ID should be Null
 	if id == nil {
 		resp.ID = null
@@ -76,26 +76,26 @@ func errResponse(id json.RawMessage, err *Error) *Response {
 }
 
 // readResponse decodes a JSON-encoded body and returns a response message.
-func readResponse(r io.Reader) (*Response, error) {
+func readResponse(r io.Reader) (*response, error) {
 	msg := &rawMessage{}
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return nil, errInvalidEncodedJSON
 	}
 	result, err := json.Marshal(msg.Result)
 	if err != nil || msg.Method != "" {
-		return &Response{ID: msg.ID}, errInvalidDecodedMessage
+		return &response{ID: msg.ID}, errInvalidDecodedMessage
 	}
-	return &Response{ID: msg.ID, Result: (json.RawMessage)(result), Error: msg.Error}, nil
+	return &response{ID: msg.ID, Result: (json.RawMessage)(result), Error: msg.Error}, nil
 }
 
 // readRequest decodes a JSON-encoded body and returns a request message.
-func readRequest(r io.Reader) (*Request, error) {
+func readRequest(r io.Reader) (*request, error) {
 	msg := &rawMessage{}
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return nil, errInvalidEncodedJSON
 	}
 
-	req := &Request{ID: msg.ID, Method: msg.Method, Params: msg.Params}
+	req := &request{ID: msg.ID, Method: msg.Method, Params: msg.Params}
 	if msg.ID == nil {
 		req.isNotification = true
 	}

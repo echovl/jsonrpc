@@ -127,7 +127,7 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			log.Print("jsonrpc: notification: ", err)
 			return
 		}
-		rw.WriteHeader(http.StatusAccepted)
+		rw.WriteHeader(http.StatusOK)
 		rw.Write([]byte(""))
 		return
 	}
@@ -148,7 +148,7 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendMessage(rw, &Response{
+	sendMessage(rw, &response{
 		ID:     req.ID,
 		Error:  nil,
 		Result: (json.RawMessage)(result),
@@ -161,7 +161,7 @@ func sendMessage(rw http.ResponseWriter, msg message) {
 	}
 }
 
-func callMethod(ctx context.Context, req *Request, htype handlerType) ([]reflect.Value, error) {
+func callMethod(ctx context.Context, req *request, htype handlerType) ([]reflect.Value, error) {
 	var retv []reflect.Value
 	if htype.numArgs == 1 {
 		retv = htype.f.Call([]reflect.Value{reflect.ValueOf(ctx)})

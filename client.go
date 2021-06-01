@@ -61,7 +61,7 @@ func (c *Client) notify(ctx context.Context, method string, params interface{}, 
 		done <- fmt.Errorf("jsonrpc: marshaling params: %w", err)
 		return
 	}
-	req := &Request{ID: nil, Method: method, Params: p}
+	req := &request{ID: nil, Method: method, Params: p}
 	buf := &bytes.Buffer{}
 	if err := writeMessage(buf, req); err != nil {
 		done <- fmt.Errorf("jsonrpc: encoding request: %w", err)
@@ -84,7 +84,7 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 		done <- fmt.Errorf("jsonrpc: marshaling params: %w", err)
 		return
 	}
-	req := &Request{ID: c.nextID(), Method: method, Params: p}
+	req := &request{ID: c.nextID(), Method: method, Params: p}
 	buf := &bytes.Buffer{}
 	if err := writeMessage(buf, req); err != nil {
 		done <- fmt.Errorf("jsonrpc: encoding request: %w", err)
