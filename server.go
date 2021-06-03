@@ -184,7 +184,7 @@ func callMethod(ctx context.Context, req *request, htype handlerType) ([]reflect
 	if req.Params == nil || string(req.Params) == string(null) {
 		return nil, errServerInvalidParams
 	}
-	if err := json.Unmarshal(req.Params, pvalue.Interface()); err != nil || reflect.DeepEqual(pzero, pvalue.Elem()) {
+	if err := json.Unmarshal(req.Params, pvalue.Interface()); err != nil || pvalue.Elem().Interface() == pzero.Elem().Interface() {
 		return nil, errServerInvalidParams
 	}
 

@@ -221,6 +221,15 @@ var serveErrTestcases = []testcase{
 	},
 	{
 		numArgs: 2,
+		name:    "invalid_params_struct",
+		req:     `{"jsonrpc":"2.0","id":1,"method":"invalid_params_struct","params":{}}`,
+		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Invalid params"}}` + "\n",
+		f: func(ctx context.Context, s Struct) (Struct, error) {
+			return Struct{}, nil
+		},
+	},
+	{
+		numArgs: 2,
 		name:    "invalid_output",
 		req:     `{"jsonrpc":"2.0","id":1,"method":"invalid_output","params":"input"}`,
 		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Internal error"}}` + "\n",
