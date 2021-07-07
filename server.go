@@ -106,17 +106,17 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	req, err := readRequest(r.Body)
 	defer r.Body.Close()
 	if errors.Is(err, errInvalidEncodedJSON) {
-		sendMessage(rw, errResponse(null, &ErrorParseError))
+		sendMessage(rw, errResponse(null, ErrorParseError))
 		return
 	}
 	if errors.Is(err, errInvalidDecodedMessage) {
-		sendMessage(rw, errResponse(req.ID, &ErrInvalidRequest))
+		sendMessage(rw, errResponse(req.ID, ErrInvalidRequest))
 		return
 	}
 
 	method, ok := s.handler.Load(req.Method)
 	if !ok {
-		sendMessage(rw, errResponse(req.ID, &ErrMethodNotFound))
+		sendMessage(rw, errResponse(req.ID, ErrMethodNotFound))
 		return
 	}
 
@@ -134,24 +134,24 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	ret, err := callMethod(ctx, req, htype)
 	if errors.Is(err, errServerInvalidParams) {
-		sendMessage(rw, errResponse(req.ID, &ErrInvalidParams))
+		sendMessage(rw, errResponse(req.ID, ErrInvalidParams))
 		return
 	}
 
 	result, err := encodeMethodReturn(ret)
 	if errors.Is(err, errServerInvalidReturn) {
-		sendMessage(rw, errResponse(req.ID, &ErrInternalError))
+		sendMessage(rw, errResponse(req.ID, ErrInternalError))
 		return
 	}
-	if err, ok := err.(Error); ok {
-		sendMessage(rw, errResponse(req.ID, &err))
+	if err, ok := err.(*Error); ok {
+		sendMessage(rw, errResponse(req.ID, err))
 		return
 	}
 
-	sendMessage(rw, &response{
-		ID:     req.ID,
-		Error:  nil,
-		Result: (json.RawMessage)(result),
+	sendMessage(rw, &Response{
+		id:     req.ID,
+		error:  nil,
+		result: (json.RawMessage)(result),
 	})
 }
 
@@ -199,10 +199,10 @@ func callMethod(ctx context.Context, req *request, htype handlerType) ([]reflect
 func encodeMethodReturn(ret []reflect.Value) (json.RawMessage, error) {
 	outErr := ret[1].Interface()
 	switch err := outErr.(type) {
-	case Error:
+	case *Error:
 		return nil, err
 	case error:
-		return nil, Error{Code: -32000, Message: err.Error()}
+		return nil, &Error{Code: -32000, Message: err.Error()}
 	default:
 	}
 

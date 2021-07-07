@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"sync/atomic"
 )
 
@@ -31,15 +30,16 @@ func NewClient(url string) *Client {
 	return &Client{url: url, httpClient: http.DefaultClient}
 }
 
-// Call executes the named method, waits for it to complete, and returns its error status.
-func (c *Client) Call(ctx context.Context, method string, params, reply interface{}) error {
+// Call executes the named method, waits for it to complete, and returns a JSONRPC response.
+func (c *Client) Call(ctx context.Context, method string, params interface{}) (*Response, error) {
 	done := make(chan error)
-	go c.call(ctx, method, params, reply, done)
+	resp := &Response{}
+	go c.call(ctx, method, params, resp, done)
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("jsonrpc: %v", ctx.Err())
+		return nil, fmt.Errorf("jsonrpc: %v", ctx.Err())
 	case err := <-done:
-		return err
+		return resp, err
 	}
 }
 
@@ -78,7 +78,7 @@ func (c *Client) notify(ctx context.Context, method string, params interface{}, 
 	done <- nil
 }
 
-func (c *Client) call(ctx context.Context, method string, params, reply interface{}, done chan error) {
+func (c *Client) call(ctx context.Context, method string, params interface{}, resp *Response, done chan error) {
 	p, err := json.Marshal(params)
 	if err != nil {
 		done <- fmt.Errorf("jsonrpc: marshaling params: %w", err)
@@ -98,20 +98,11 @@ func (c *Client) call(ctx context.Context, method string, params, reply interfac
 	}
 	defer rc.Close()
 
-	res, err := readResponse(rc)
-	if err != nil {
+	if err := decodeResponseFromReader(rc, resp); err != nil {
 		done <- fmt.Errorf("jsonrpc: reading response: %w", err)
 		return
 	}
-	if res.Err() != nil {
-		done <- res.Err()
-		return
-	}
 
-	if err := json.Unmarshal(res.Result, reply); err != nil {
-		done <- fmt.Errorf("jsonrpc: unmarshaling result: %w", err)
-		return
-	}
 	done <- nil
 }
 
@@ -132,7 +123,6 @@ func (c *Client) send(ctx context.Context, r io.Reader) (io.ReadCloser, error) {
 }
 
 // nextID returns the next id using atomic operations
-func (c *Client) nextID() json.RawMessage {
-	id := atomic.AddInt64(&c.next, 1)
-	return json.RawMessage(strconv.FormatInt(id, 10))
+func (c *Client) nextID() interface{} {
+	return atomic.AddInt64(&c.next, 1)
 }

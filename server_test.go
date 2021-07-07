@@ -117,7 +117,7 @@ var serveTestcases = []testcase{
 		params:  nil,
 		resp:    `{"jsonrpc":"2.0","id":9,"error":{"code":-32300,"message":"Something went wrong","data":[1,2,3]}}` + "\n",
 		f: func(ctx context.Context) (Struct, error) {
-			return Struct{}, Error{Code: -32300, Message: "Something went wrong", Data: []int{1, 2, 3}}
+			return Struct{}, &Error{Code: -32300, Message: "Something went wrong", Data: []int{1, 2, 3}}
 		},
 	},
 	// 2 args, 2 returns
