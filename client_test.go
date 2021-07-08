@@ -49,8 +49,11 @@ func TestCallSync(t *testing.T) {
 
 	// Some valid calls
 	sum := &Reply{}
-	err := client.Call(context.Background(), "sum", Args{1, 2}, sum)
+	resp, err := client.Call(context.Background(), "sum", Args{1, 2})
 	if err != nil {
+		t.Errorf("sum: error not expected: %v", err)
+	}
+	if err := resp.Decode(sum); err != nil {
 		t.Errorf("sum: error not expected: %v", err)
 	}
 	if sum.C != 3 {
@@ -58,27 +61,30 @@ func TestCallSync(t *testing.T) {
 	}
 
 	rnd := &Reply{}
-	err = client.Call(context.Background(), "random", Args{1, 2}, rnd)
+	resp, err = client.Call(context.Background(), "random", Args{1, 2})
 	if err != nil {
+		t.Errorf("random: error not expected: %v", err)
+	}
+	if err := resp.Decode(rnd); err != nil {
 		t.Errorf("random: error not expected: %v", err)
 	}
 
 	// Invalid params
-	err = client.Call(context.Background(), "sum", nil, sum)
-	if err != ErrInvalidParams {
-		t.Errorf("sum invalid params err:\ngot: %v\nwant: ErrInvalidParams", err)
+	resp, _ = client.Call(context.Background(), "sum", nil)
+	if resp.error == nil || *resp.error != *ErrInvalidParams {
+		t.Errorf("sum invalid params err:\ngot: %v\nwant: ErrInvalidParams", resp.error)
 	}
 
 	// Unknown method
-	err = client.Call(context.Background(), "unknown", nil, &struct{}{})
-	if err != ErrMethodNotFound {
+	resp, _ = client.Call(context.Background(), "unknown", nil)
+	if resp.error == nil || *resp.error != *ErrMethodNotFound {
 		t.Errorf("unknown method:\ngot: %v\nwant: ErrMethodNotFound", err)
 	}
 
 	// Context canceled
 	ctx, cancel := context.WithTimeout(context.Background(), time.Microsecond)
 	defer cancel()
-	err = client.Call(ctx, "slow", nil, &struct{}{})
+	resp, _ = client.Call(ctx, "slow", nil)
 	if errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Context canceled: expected context.DeadlineExceeded, got %v", err)
 	}
@@ -99,8 +105,11 @@ func BenchmarkClientSync(b *testing.B) {
 		client := NewClient("http://localhost" + port)
 		for i := 0; i < b.N; i++ {
 			var reply int
-			err := client.Call(context.Background(), "counter", 6, &reply)
+			resp, err := client.Call(context.Background(), "counter", 6)
 			if err != nil {
+				panic(err)
+			}
+			if err := resp.Decode(&reply); err != nil {
 				panic(err)
 			}
 		}

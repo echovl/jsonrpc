@@ -45,7 +45,7 @@ var serveTestcases = []testcase{
 		numArgs: 1,
 		name:    "nil_string",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":1,"result":"string"}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":1,"result":"string"}`,
 		f: func(ctx context.Context) (string, error) {
 			return "string", nil
 		},
@@ -55,7 +55,7 @@ var serveTestcases = []testcase{
 		numArgs: 1,
 		name:    "nil_int",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":2,"result":33}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":2,"result":33}`,
 		f: func(ctx context.Context) (int, error) {
 			return 33, nil
 		},
@@ -65,7 +65,7 @@ var serveTestcases = []testcase{
 		numArgs: 1,
 		name:    "nil_struct",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":"3","result":{"text":"text","number":33,"boolean":true}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":"3","result":{"text":"text","number":33,"boolean":true}}`,
 		f: func(ctx context.Context) (Struct, error) {
 			return Struct{Text: "text", Number: 33, Boolean: true}, nil
 		},
@@ -75,7 +75,7 @@ var serveTestcases = []testcase{
 		numArgs: 1,
 		name:    "nil_ptrstruct",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":"randomid","result":{"text":"text","boolean":true}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":"randomid","result":{"text":"text","boolean":true}}`,
 		f: func(ctx context.Context) (*Struct, error) {
 			return &Struct{Text: "text", Boolean: true}, nil
 		},
@@ -85,7 +85,7 @@ var serveTestcases = []testcase{
 		numArgs: 1,
 		name:    "nil_struct_stderror",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":6,"error":{"code":-32000,"message":"something went wrong"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":6,"error":{"code":-32000,"message":"something went wrong"}}`,
 		f: func(ctx context.Context) (Struct, error) {
 			return Struct{}, errors.New("something went wrong")
 		},
@@ -95,7 +95,7 @@ var serveTestcases = []testcase{
 		numArgs: 1,
 		name:    "nil_struct_liberror",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"Internal error"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"Internal error"}}`,
 		f: func(ctx context.Context) (Struct, error) {
 			return Struct{}, ErrInternalError
 		},
@@ -105,7 +105,7 @@ var serveTestcases = []testcase{
 		numArgs: 1,
 		name:    "nil_struct_liberror2",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":8,"error":{"code":-32602,"message":"Invalid params"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":8,"error":{"code":-32602,"message":"Invalid params"}}`,
 		f: func(ctx context.Context) (Struct, error) {
 			return Struct{}, ErrInvalidParams
 		},
@@ -115,9 +115,9 @@ var serveTestcases = []testcase{
 		numArgs: 1,
 		name:    "nil_struct_customerror",
 		params:  nil,
-		resp:    `{"jsonrpc":"2.0","id":9,"error":{"code":-32300,"message":"Something went wrong","data":[1,2,3]}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":9,"error":{"code":-32300,"message":"Something went wrong","data":[1,2,3]}}`,
 		f: func(ctx context.Context) (Struct, error) {
-			return Struct{}, Error{Code: -32300, Message: "Something went wrong", Data: []int{1, 2, 3}}
+			return Struct{}, &Error{Code: -32300, Message: "Something went wrong", Data: []int{1, 2, 3}}
 		},
 	},
 	// 2 args, 2 returns
@@ -126,7 +126,7 @@ var serveTestcases = []testcase{
 		numArgs: 2,
 		name:    "string_string",
 		params:  "input",
-		resp:    `{"jsonrpc":"2.0","id":"nanoid","result":"input"}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":"nanoid","result":"input"}`,
 		f: func(ctx context.Context, s string) (string, error) {
 			return s, nil
 		},
@@ -136,7 +136,7 @@ var serveTestcases = []testcase{
 		numArgs: 2,
 		name:    "int_int",
 		params:  33,
-		resp:    `{"jsonrpc":"2.0","id":10,"result":33}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":10,"result":33}`,
 		f: func(ctx context.Context, n int) (int, error) {
 			return n, nil
 		},
@@ -146,7 +146,7 @@ var serveTestcases = []testcase{
 		numArgs: 2,
 		name:    "struct_struct",
 		params:  Struct{Text: "text", Number: 33},
-		resp:    `{"jsonrpc":"2.0","id":11,"result":{"text":"text","number":33}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":11,"result":{"text":"text","number":33}}`,
 		f: func(ctx context.Context, s Struct) (Struct, error) {
 			return s, nil
 		},
@@ -156,7 +156,7 @@ var serveTestcases = []testcase{
 		numArgs: 2,
 		name:    "ptrstruct_struct",
 		params:  &Struct{Text: "text", Number: 33},
-		resp:    `{"jsonrpc":"2.0","id":33,"result":{"text":"text","number":33}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":33,"result":{"text":"text","number":33}}`,
 		f: func(ctx context.Context, s *Struct) (Struct, error) {
 			return *s, nil
 		},
@@ -178,7 +178,7 @@ var serveErrTestcases = []testcase{
 		numArgs: 1,
 		name:    "parse_error",
 		req:     `invalid_json`,
-		resp:    `{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}`,
 		f: func(ctx context.Context) (string, error) {
 			return "string", nil
 		},
@@ -187,7 +187,7 @@ var serveErrTestcases = []testcase{
 		numArgs: 2,
 		name:    "method_not_found",
 		req:     `{"jsonrpc":"2.0","id":1,"method":"garbage_text","params":[]}`,
-		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}`,
 		f: func(ctx context.Context, s string) (string, error) {
 			return "string", nil
 		},
@@ -196,7 +196,7 @@ var serveErrTestcases = []testcase{
 		numArgs: 2,
 		name:    "method_not_found_without_id",
 		req:     `{"jsonrpc":"2.0","method":"garbage_text","params":[]}`,
-		resp:    `{"jsonrpc":"2.0","id":null,"error":{"code":-32601,"message":"Method not found"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":null,"error":{"code":-32601,"message":"Method not found"}}`,
 		f: func(ctx context.Context, s string) (string, error) {
 			return "string", nil
 		},
@@ -205,7 +205,7 @@ var serveErrTestcases = []testcase{
 		numArgs: 2,
 		name:    "missing_method",
 		req:     `{"jsonrpc":"2.0","id":1,"params":[]}`,
-		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}`,
 		f: func(ctx context.Context, s string) (string, error) {
 			return "string", nil
 		},
@@ -214,7 +214,7 @@ var serveErrTestcases = []testcase{
 		numArgs: 2,
 		name:    "invalid_params",
 		req:     `{"jsonrpc":"2.0","id":1,"method":"invalid_params","params":[1,2]}`,
-		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Invalid params"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Invalid params"}}`,
 		f: func(ctx context.Context, s string) (string, error) {
 			return "string", nil
 		},
@@ -223,7 +223,7 @@ var serveErrTestcases = []testcase{
 		numArgs: 2,
 		name:    "invalid_params_struct",
 		req:     `{"jsonrpc":"2.0","id":1,"method":"invalid_params_struct","params":{}}`,
-		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Invalid params"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Invalid params"}}`,
 		f: func(ctx context.Context, s Struct) (Struct, error) {
 			return Struct{}, nil
 		},
@@ -232,7 +232,7 @@ var serveErrTestcases = []testcase{
 		numArgs: 2,
 		name:    "invalid_output",
 		req:     `{"jsonrpc":"2.0","id":1,"method":"invalid_output","params":"input"}`,
-		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Internal error"}}` + "\n",
+		resp:    `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"Internal error"}}`,
 		f: func(ctx context.Context, s string) (BadStruct, error) {
 			return BadStruct{}, nil
 		},

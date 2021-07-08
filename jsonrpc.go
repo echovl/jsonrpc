@@ -6,11 +6,11 @@ import (
 )
 
 var (
-	ErrorParseError   = Error{-32700, "Parse error", nil}
-	ErrInvalidRequest = Error{-32600, "Invalid Request", nil}
-	ErrMethodNotFound = Error{-32601, "Method not found", nil}
-	ErrInvalidParams  = Error{-32602, "Invalid params", nil}
-	ErrInternalError  = Error{-32603, "Internal error", nil}
+	ErrorParseError   = &Error{-32700, "Parse error", nil}
+	ErrInvalidRequest = &Error{-32600, "Invalid Request", nil}
+	ErrMethodNotFound = &Error{-32601, "Method not found", nil}
+	ErrInvalidParams  = &Error{-32602, "Invalid params", nil}
+	ErrInternalError  = &Error{-32603, "Internal error", nil}
 	//ErrServerError    = Error{-32000, "Parse error", nil}
 )
 
@@ -22,6 +22,6 @@ type Error struct {
 }
 
 // Error returns the string representation of the error.
-func (e Error) Error() string {
+func (e *Error) Error() string {
 	return fmt.Sprint("jsonrpc: ", strings.ToLower(e.Message))
 }

@@ -103,20 +103,20 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	req, err := readRequest(r.Body)
+	req, err := decodeRequestFromReader(r.Body)
 	defer r.Body.Close()
 	if errors.Is(err, errInvalidEncodedJSON) {
-		sendMessage(rw, errResponse(null, &ErrorParseError))
+		sendResponse(rw, errResponse(null, ErrorParseError))
 		return
 	}
 	if errors.Is(err, errInvalidDecodedMessage) {
-		sendMessage(rw, errResponse(req.ID, &ErrInvalidRequest))
+		sendResponse(rw, errResponse(req.ID, ErrInvalidRequest))
 		return
 	}
 
 	method, ok := s.handler.Load(req.Method)
 	if !ok {
-		sendMessage(rw, errResponse(req.ID, &ErrMethodNotFound))
+		sendResponse(rw, errResponse(req.ID, ErrMethodNotFound))
 		return
 	}
 
@@ -134,29 +134,35 @@ func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	ret, err := callMethod(ctx, req, htype)
 	if errors.Is(err, errServerInvalidParams) {
-		sendMessage(rw, errResponse(req.ID, &ErrInvalidParams))
+		sendResponse(rw, errResponse(req.ID, ErrInvalidParams))
 		return
 	}
 
 	result, err := encodeMethodReturn(ret)
 	if errors.Is(err, errServerInvalidReturn) {
-		sendMessage(rw, errResponse(req.ID, &ErrInternalError))
+		sendResponse(rw, errResponse(req.ID, ErrInternalError))
 		return
 	}
-	if err, ok := err.(Error); ok {
-		sendMessage(rw, errResponse(req.ID, &err))
+	if err, ok := err.(*Error); ok {
+		sendResponse(rw, errResponse(req.ID, err))
 		return
 	}
 
-	sendMessage(rw, &response{
-		ID:     req.ID,
-		Error:  nil,
-		Result: (json.RawMessage)(result),
+	sendResponse(rw, &Response{
+		id:     req.ID,
+		error:  nil,
+		result: (json.RawMessage)(result),
 	})
 }
 
-func sendMessage(rw http.ResponseWriter, msg message) {
-	if err := writeMessage(rw, msg); err != nil {
+func sendResponse(rw http.ResponseWriter, resp *Response) {
+	b, err := resp.bytes()
+	if err != nil {
+		log.Printf("jsonrpc: sending response: %v", err)
+		return
+	}
+	_, err = rw.Write(b)
+	if err != nil {
 		log.Printf("jsonrpc: sending response: %v", err)
 	}
 }
@@ -199,10 +205,10 @@ func callMethod(ctx context.Context, req *request, htype handlerType) ([]reflect
 func encodeMethodReturn(ret []reflect.Value) (json.RawMessage, error) {
 	outErr := ret[1].Interface()
 	switch err := outErr.(type) {
-	case Error:
+	case *Error:
 		return nil, err
 	case error:
-		return nil, Error{Code: -32000, Message: err.Error()}
+		return nil, &Error{Code: -32000, Message: err.Error()}
 	default:
 	}
 

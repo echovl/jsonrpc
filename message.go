@@ -3,7 +3,6 @@ package jsonrpc
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -15,7 +14,7 @@ var (
 
 type rawMessage struct {
 	Version string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
+	ID      interface{}     `json:"id,omitempty"`
 	Method  string          `json:"method,omitempty"`
 	Params  json.RawMessage `json:"params,omitempty"`
 	Result  json.RawMessage `json:"result,omitempty"`
@@ -24,72 +23,92 @@ type rawMessage struct {
 
 // request represents a JSON-RPC request received by a server or to be send by a client.
 type request struct {
-	ID             json.RawMessage
+	ID             interface{}
 	Method         string
 	Params         json.RawMessage
 	isNotification bool
 }
 
-// Request represents the response from a JSON-RPC request.
-type response struct {
-	ID     json.RawMessage
-	Result json.RawMessage
-	Error  *Error
+func (r *request) bytes() ([]byte, error) {
+	msg := rawMessage{
+		Version: "2.0",
+		ID:      r.ID,
+		Method:  r.Method,
+		Params:  r.Params,
+	}
+	return json.Marshal(msg)
 }
 
-// message represents jsonrpc messages that can be marshal to a raw jsonrpc object
-type message interface {
-	marshal() rawMessage
+// Response represents the Response from a JSON-RPC request.
+type Response struct {
+	id     interface{}
+	result json.RawMessage
+	error  *Error
 }
 
-func writeMessage(w io.Writer, msg message) error {
-	b := msg.marshal()
-	b.Version = "2.0"
-	if err := json.NewEncoder(w).Encode(b); err != nil {
-		return fmt.Errorf("marshaling jsonrpc message: %w", err)
+func (r *Response) ID() interface{} {
+	return r.id
+}
+
+func (r *Response) Err() error {
+	if r.error == nil {
+		return nil
+	}
+	return r.error
+}
+
+// Decode will unmarshal the Response's result into v. If there was an error in the Response, that error will be returned.
+func (r *Response) Decode(v interface{}) error {
+	if err := r.Err(); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(r.result, v); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (req *request) marshal() rawMessage {
-	return rawMessage{ID: req.ID, Method: req.Method, Params: req.Params}
-}
-
-func (res *response) Err() error {
-	if res.Error == nil {
-		return nil
+// bytes returns the JSON encoded representation of the Response.
+func (r *Response) bytes() ([]byte, error) {
+	msg := rawMessage{
+		Version: "2.0",
+		ID:      r.id,
+		Result:  r.result,
+		Error:   r.error,
 	}
-	return *res.Error
+	return json.Marshal(msg)
 }
 
-func (res *response) marshal() rawMessage {
-	return rawMessage{ID: res.ID, Result: res.Result, Error: res.Error}
-}
-
-func errResponse(id json.RawMessage, err *Error) *response {
-	resp := &response{ID: id, Result: nil, Error: err}
+func errResponse(id interface{}, err *Error) *Response {
+	resp := &Response{id: id, result: nil, error: err}
 	// If there was an error in detecting the id in the Request object, ID should be Null
 	if id == nil {
-		resp.ID = null
+		resp.id = null
 	}
 	return resp
 }
 
-// readResponse decodes a JSON-encoded body and returns a response message.
-func readResponse(r io.Reader) (*response, error) {
+// decodeResponseFromReader decodes a JSON-encoded response from r and stores it in resp.
+func decodeResponseFromReader(r io.Reader, resp *Response) error {
 	msg := &rawMessage{}
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
-		return nil, errInvalidEncodedJSON
+		return errInvalidEncodedJSON
 	}
 	result, err := json.Marshal(msg.Result)
 	if err != nil || msg.Method != "" {
-		return &response{ID: msg.ID}, errInvalidDecodedMessage
+		resp.id = msg.ID
+		return errInvalidDecodedMessage
 	}
-	return &response{ID: msg.ID, Result: (json.RawMessage)(result), Error: msg.Error}, nil
+
+	resp.id = msg.ID
+	resp.result = result
+	resp.error = msg.Error
+
+	return nil
 }
 
-// readRequest decodes a JSON-encoded body and returns a request message.
-func readRequest(r io.Reader) (*request, error) {
+// decodeRequestFromReader decodes a JSON-encoded body and returns a request message.
+func decodeRequestFromReader(r io.Reader) (*request, error) {
 	msg := &rawMessage{}
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return nil, errInvalidEncodedJSON

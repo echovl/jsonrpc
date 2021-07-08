@@ -40,6 +40,7 @@ func main() {
 }
 
 ```
+
 ## Client
 
 ```go
@@ -60,10 +61,13 @@ type User struct {
 func main() {
 	client := jsonrpc.NewClient("http://127.0.0.1:4545/api")
 	user := &User{}
-	err := client.Call(context.Background(), "getUserById", "id", &user)
+	resp, err := client.Call(context.Background(), "getUserById", "id")
 	if err != nil {
 		panic(err)
 	}
+    if err := resp.Decode(user); err != nil {
+		panic(err)
+    }
 	fmt.Println("user: ", user)
 }
 ```
