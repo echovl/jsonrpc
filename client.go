@@ -62,13 +62,7 @@ func (c *Client) notify(ctx context.Context, method string, params interface{}, 
 		return
 	}
 	req := &request{ID: nil, Method: method, Params: p}
-	buf := &bytes.Buffer{}
-	if err := writeMessage(buf, req); err != nil {
-		done <- fmt.Errorf("jsonrpc: encoding request: %w", err)
-		return
-	}
-
-	rc, err := c.send(ctx, buf)
+	rc, err := c.send(ctx, req)
 	if err != nil {
 		done <- fmt.Errorf("jsonrpc: sending request: %w", err)
 		return
@@ -85,13 +79,7 @@ func (c *Client) call(ctx context.Context, method string, params interface{}, re
 		return
 	}
 	req := &request{ID: c.nextID(), Method: method, Params: p}
-	buf := &bytes.Buffer{}
-	if err := writeMessage(buf, req); err != nil {
-		done <- fmt.Errorf("jsonrpc: encoding request: %w", err)
-		return
-	}
-
-	rc, err := c.send(ctx, buf)
+	rc, err := c.send(ctx, req)
 	if err != nil {
 		done <- fmt.Errorf("jsonrpc: sending request: %w", err)
 		return
@@ -107,8 +95,12 @@ func (c *Client) call(ctx context.Context, method string, params interface{}, re
 }
 
 // send sends data from r to the http server and returns a reader of the response
-func (c *Client) send(ctx context.Context, r io.Reader) (io.ReadCloser, error) {
-	hreq, err := http.NewRequestWithContext(ctx, "POST", c.url, r)
+func (c *Client) send(ctx context.Context, req *request) (io.ReadCloser, error) {
+	b, err := req.bytes()
+	if err != nil {
+		return nil, err
+	}
+	hreq, err := http.NewRequestWithContext(ctx, "POST", c.url, bytes.NewBuffer(b))
 	if err != nil {
 		return nil, err
 	}

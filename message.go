@@ -3,7 +3,6 @@ package jsonrpc
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -30,22 +29,14 @@ type request struct {
 	isNotification bool
 }
 
-// message represents jsonrpc messages that can be marshal to a raw jsonrpc object
-type message interface {
-	marshal() rawMessage
-}
-
-func writeMessage(w io.Writer, msg message) error {
-	b := msg.marshal()
-	b.Version = "2.0"
-	if err := json.NewEncoder(w).Encode(b); err != nil {
-		return fmt.Errorf("marshaling jsonrpc message: %w", err)
+func (r *request) bytes() ([]byte, error) {
+	msg := rawMessage{
+		Version: "2.0",
+		ID:      r.ID,
+		Method:  r.Method,
+		Params:  r.Params,
 	}
-	return nil
-}
-
-func (req *request) marshal() rawMessage {
-	return rawMessage{ID: req.ID, Method: req.Method, Params: req.Params}
+	return json.Marshal(msg)
 }
 
 // Response represents the Response from a JSON-RPC request.
@@ -77,21 +68,15 @@ func (r *Response) Decode(v interface{}) error {
 	return nil
 }
 
-func (r *Response) encode(w io.Writer) error {
+// bytes returns the JSON encoded representation of the Response.
+func (r *Response) bytes() ([]byte, error) {
 	msg := rawMessage{
 		Version: "2.0",
 		ID:      r.id,
 		Result:  r.result,
 		Error:   r.error,
 	}
-	if err := json.NewEncoder(w).Encode(msg); err != nil {
-		return fmt.Errorf("marshaling jsonrpc message: %w", err)
-	}
-	return nil
-}
-
-func (res *Response) marshal() rawMessage {
-	return rawMessage{ID: res.id, Result: res.result, Error: res.error}
+	return json.Marshal(msg)
 }
 
 func errResponse(id interface{}, err *Error) *Response {
@@ -122,8 +107,8 @@ func decodeResponseFromReader(r io.Reader, resp *Response) error {
 	return nil
 }
 
-// readRequest decodes a JSON-encoded body and returns a request message.
-func readRequest(r io.Reader) (*request, error) {
+// decodeRequestFromReader decodes a JSON-encoded body and returns a request message.
+func decodeRequestFromReader(r io.Reader) (*request, error) {
 	msg := &rawMessage{}
 	if err := json.NewDecoder(r).Decode(msg); err != nil {
 		return nil, errInvalidEncodedJSON
