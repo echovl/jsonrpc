@@ -65,9 +65,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-    if err := resp.Decode(user); err != nil {
+    	if err := resp.Decode(user); err != nil {
 		panic(err)
-    }
+    	}
 	fmt.Println("user: ", user)
 }
 ```
