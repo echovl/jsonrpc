@@ -24,6 +24,8 @@ var (
 // Server represents a JSON-RPC server.
 type Server struct {
 	handler sync.Map
+	// cors map
+	Cors map[string]string
 }
 
 type handlerType struct {
@@ -95,6 +97,11 @@ func inspectHandler(h reflect.Value) (numArgs int, ptype, rtype reflect.Type, er
 
 // ServeHTTP responds to an JSON-RPC request and executes the requested method.
 func (s *Server) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	if len(s.Cors) >0{
+		for k1, v1 := range s.Cors {
+			rw.Header().Add(k1,v1)
+		}
+	}
 	// Only POST methods are jsonrpc valid calls
 	if r.Method != "POST" {
 		rw.WriteHeader(http.StatusNotFound)

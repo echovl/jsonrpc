@@ -127,6 +127,23 @@ func BenchmarkClientSync(b *testing.B) {
 
 func startServer(t *testing.T, counter *state) {
 	s := NewServer()
+
+	s.HandleFunc("sum", sum)
+	s.HandleFunc("random", random)
+	s.HandleFunc("counter", counter.increaseCounter)
+
+	if err := http.ListenAndServe(port, s); err != nil {
+		t.Errorf("starting server: %v", err)
+	}
+}
+
+func startServerAddCORS(t *testing.T, counter *state) {
+	s := NewServer()
+	s.Cors = map[string]string{
+		"Access-Control-Allow-Origin":"*",
+		"Access-Control-Allow-Methods":"POST,GET,OPTIONS",
+		"Access-Control-Allow-Headers":"Content-Type",
+	}
 	s.HandleFunc("sum", sum)
 	s.HandleFunc("random", random)
 	s.HandleFunc("counter", counter.increaseCounter)
